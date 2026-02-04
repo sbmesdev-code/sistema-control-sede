@@ -23,7 +23,7 @@ export function ProductForm({ initialData, onComplete }: ProductFormProps) {
     const [step, setStep] = useState(1)
     const totalSteps = 3
 
-    const { register, control, watch, handleSubmit, reset, setValue, getValues, trigger, formState } = useForm<ProductFormData>({
+    const { register, control, watch, handleSubmit, reset, setValue, getValues, trigger } = useForm<ProductFormData>({
         defaultValues: {
             collection: 'VERANO',
             gender: 'UNISEX',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, ShoppingBag, Tag, Trash2, Plus, Minus, User, Truck, AlertTriangle, Package, Check } from 'lucide-react'
+import { Search, ShoppingBag, Tag, Trash2, Plus, Minus, User, Truck, AlertTriangle, Package } from 'lucide-react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { useInventoryStore } from '../../lib/store'
