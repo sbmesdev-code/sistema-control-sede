@@ -23,6 +23,7 @@ interface InventoryState {
     addProduct: (product: Product) => Promise<void>;
     updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
     removeProduct: (id: string) => Promise<void>;
+    cleanup: () => void;
 }
 
 export const useInventoryStore = create<InventoryState>((set, get) => ({
@@ -31,7 +32,9 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     initialized: false,
 
     initializeSubscription: () => {
-        if (get().initialized) return () => { };
+        // We allow re-subscription to handle React Strict Mode / Re-auth flows correctly.
+        // The calling component (App.tsx) is responsible for unsubscribing previous listeners.
+
 
         const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
         const unsub = onSnapshot(q, (snapshot) => {
@@ -87,5 +90,9 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
             console.error(error);
             toast.error('Error al eliminar producto');
         }
+    },
+
+    cleanup: () => {
+        set({ products: [], loading: true, initialized: false });
     }
 }));

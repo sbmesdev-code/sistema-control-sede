@@ -21,6 +21,7 @@ interface SettingsState {
     updateGlobalShipping: (price: number) => Promise<void>;
     updateDistrict: (name: string, config: Partial<DistrictConfig>) => Promise<void>;
     toggleDoorDelivery: (name: string) => Promise<void>;
+    cleanup: () => void;
 }
 
 // Full List Initialization (Fallback / Seed)
@@ -89,7 +90,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     initialized: false,
 
     initializeSubscription: () => {
-        if (get().initialized) return () => { };
+        // We allow re-subscription to handle React Strict Mode / Re-auth flows correctly.
+
 
         const docRef = doc(db, 'settings', 'global');
         const unsub = onSnapshot(docRef, async (docSnap) => {
@@ -140,14 +142,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const currentDistricts = get().districts;
         const newDistricts = currentDistricts.map(d => d.name === name ? { ...d, ...config } : d);
 
+        // Optimistic Update
+        set({ districts: newDistricts });
+
         try {
             await updateDoc(doc(db, 'settings', 'global'), {
                 districts: newDistricts
             });
-            toast.success('Distrito actualizado');
+            // toast.success('Distrito actualizado'); // Silent success for smoother feel
         } catch (e) {
             console.error(e);
             toast.error('Error al actualizar distrito');
+            // Revert on error could be added here if needed, but snapshot usually fixes it or we reload
         }
     },
 
@@ -155,14 +161,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const currentDistricts = get().districts;
         const newDistricts = currentDistricts.map(d => d.name === name ? { ...d, allowDoorDelivery: !d.allowDoorDelivery } : d);
 
+        // Optimistic Update
+        set({ districts: newDistricts });
+
         try {
             await updateDoc(doc(db, 'settings', 'global'), {
                 districts: newDistricts
             });
-            // toast.success('Preferencia actualizada'); // Maybe too noisy
         } catch (e) {
             console.error(e);
             toast.error('Error al actualizar');
+            set({ districts: currentDistricts }); // Revert
         }
+    },
+
+    cleanup: () => {
+        set({ initialized: false, loading: true });
+        // Optional: Reset to defaults or keep cached until next fetch? 
+        // Better to minimal reset to force refetch.
+        // We keep districts as is to avoid UI jumpiness if re-login immediately, 
+        // but initialized=false ensures subscription restarts.
     }
 }));

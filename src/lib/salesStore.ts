@@ -28,6 +28,7 @@ interface SalesState {
 
     // Logic
     calculateCartTotal: (items: SaleItem[], globalDiscount: number, shippingCost?: number) => { subtotal: number, discountTotal: number, shippingCost: number, total: number, appliedPromotions: string[] };
+    cleanup: () => void;
 }
 
 export const useSalesStore = create<SalesState>((set, get) => ({
@@ -37,7 +38,8 @@ export const useSalesStore = create<SalesState>((set, get) => ({
     initialized: false,
 
     initializeSubscription: () => {
-        if (get().initialized) return () => { };
+        // We allow re-subscription to handle React Strict Mode / Re-auth flows correctly.
+
 
         // 1. Subscribe to Sales
         const salesQuery = query(collection(db, 'sales'), orderBy('createdAt', 'desc'));
@@ -188,5 +190,9 @@ export const useSalesStore = create<SalesState>((set, get) => ({
             total,
             appliedPromotions: Array.from(appliedPromotions)
         };
+    },
+
+    cleanup: () => {
+        set({ sales: [], promotions: [], loading: true, initialized: false });
     }
 }));

@@ -41,10 +41,16 @@ function MarginDisplay({ cost, price }: { cost: number, price: number }) {
     )
 }
 
+import { ConfirmDialog } from '../ConfirmDialog'
+
 export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProps) {
     const products = useInventoryStore(state => state.products)
+    const removeProduct = useInventoryStore(state => state.removeProduct)
     const [searchTerm, setSearchTerm] = useState('')
     const [expandedRows, setExpandedRows] = useState<string[]>([])
+
+    // Delete State
+    const [productToDelete, setProductToDelete] = useState<string | null>(null)
 
     // Simple filtering
     const filteredProducts = products.filter(product =>
@@ -57,6 +63,13 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
         setExpandedRows(prev =>
             prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
         )
+    }
+
+    const handleDeleteConfirm = async () => {
+        if (productToDelete) {
+            await removeProduct(productToDelete);
+            setProductToDelete(null);
+        }
     }
 
     return (
@@ -211,7 +224,7 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
                                             </div>
                                             <div className="mt-4 flex justify-end gap-2">
                                                 <Button size="sm" variant="outline" onClick={() => onEditProduct(product)}>Editar Producto</Button>
-                                                <Button size="sm" variant="destructive" onClick={() => alert("Eliminar producto - Pendiente")}>Eliminar</Button>
+                                                <Button size="sm" variant="destructive" onClick={() => setProductToDelete(product.id)}>Eliminar</Button>
                                             </div>
                                         </div>
                                     )}
@@ -221,6 +234,16 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
                     )}
                 </div>
             </div>
+
+            <ConfirmDialog
+                isOpen={!!productToDelete}
+                onClose={() => setProductToDelete(null)}
+                onConfirm={handleDeleteConfirm}
+                title="Eliminar Producto"
+                message="¿Estás seguro de que deseas eliminar este producto y todas sus variantes? Esta acción no se puede deshacer."
+                confirmText="Sí, Eliminar"
+                variant="danger"
+            />
         </div>
     )
 }

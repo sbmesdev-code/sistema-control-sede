@@ -200,14 +200,24 @@ export function POS() {
 
                 <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-3 gap-4 pb-20">
                     {filteredProducts.map(product => (
-                        <div key={product.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/50 transition-all cursor-pointer group shadow-sm">
-                            <div className="flex justify-between items-start mb-2">
-                                <span className="text-[10px] font-bold px-2 py-0.5 bg-accent rounded text-muted-foreground">{product.collection}</span>
-                                <span className="text-xs font-mono text-muted-foreground">{product.baseCode}</span>
+                        <div key={product.id} className="bg-card border border-border rounded-xl p-5 hover:border-primary/50 transition-all cursor-pointer group shadow-sm hover:shadow-md">
+                            {/* Header: Collection and SKU */}
+                            <div className="flex justify-between items-center mb-3">
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-md tracking-wide">
+                                    {product.collection}
+                                </span>
+                                <span className="text-[10px] font-mono text-muted-foreground tracking-tight">
+                                    {product.baseCode}
+                                </span>
                             </div>
-                            <h4 className="font-semibold leading-tight line-clamp-2 mb-2 group-hover:text-primary transition-colors">{product.name}</h4>
 
-                            <div className="space-y-2 mt-4">
+                            {/* Title */}
+                            <h4 className="font-bold text-lg leading-tight line-clamp-2 mb-4 group-hover:text-primary transition-colors">
+                                {product.name}
+                            </h4>
+
+                            {/* Variants List - Compact Grid */}
+                            <div className="grid grid-cols-2 gap-2">
                                 {product.variants.map(variant => {
                                     const inCart = cart.find(i => i.variantId === variant.id)?.quantity || 0;
                                     const outOfStock = variant.stock === 0;
@@ -217,20 +227,38 @@ export function POS() {
                                         <button
                                             key={variant.id}
                                             disabled={outOfStock}
-                                            className={`w-full flex justify-between items-center text-xs p-2 rounded transition-colors border border-transparent
-                                            ${outOfStock ? 'bg-muted opacity-50 cursor-not-allowed' : 'bg-muted/50 hover:bg-primary hover:text-primary-foreground'}
-                                        `}
+                                            className={`
+                                                relative flex flex-col justify-center items-center p-2 rounded-lg border transition-all text-center h-16
+                                                ${outOfStock
+                                                    ? 'bg-muted/50 border-muted text-muted-foreground cursor-not-allowed opacity-60'
+                                                    : 'bg-background hover:bg-primary hover:text-primary-foreground border-border hover:border-primary'}
+                                            `}
                                             onClick={() => addToCart(variant, product)}
                                         >
-                                            <div className="flex gap-2">
-                                                <span>{variant.color}</span>
-                                                <span className="font-mono opacity-80">{variant.size}</span>
+
+                                            {/* Size & Color */}
+                                            <div className="text-xs font-semibold leading-none mb-1">
+                                                {variant.color} <span className="opacity-70">|</span> {variant.size}
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                {remaining <= 3 && !outOfStock && <span className="text-[10px] font-bold text-orange-500">¡Quedan {remaining}!</span>}
-                                                {outOfStock && <span className="text-[10px] font-bold text-destructive">AGOTADO</span>}
-                                                <div className="font-bold">${variant.priceRetail}</div>
+
+                                            {/* Price */}
+                                            <div className="text-sm font-bold font-mono">
+                                                S/ {variant.priceRetail.toFixed(0)}
                                             </div>
+
+                                            {/* Stock Badge (Absolute) */}
+                                            {!outOfStock && remaining <= 3 && (
+                                                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[8px] font-bold text-white animate-pulse shadow-sm">
+                                                    !
+                                                </span>
+                                            )}
+
+                                            {/* In Cart Badge */}
+                                            {inCart > 0 && (
+                                                <span className="absolute -top-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground shadow-sm">
+                                                    {inCart}
+                                                </span>
+                                            )}
                                         </button>
                                     )
                                 })}

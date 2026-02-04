@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
-import { LayoutDashboard, Package, ShoppingCart, Settings, Menu, Bell, Search, Layers, Tag, LogOut } from 'lucide-react'
+import { LayoutDashboard, Package, ShoppingCart, Settings, Menu, Bell, Search, Layers, Tag, LogOut, Truck } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { cn } from './lib/utils'
 import { InventorySection } from './components/InventorySection'
 import { SalesSection } from './components/SalesSection'
 import { PromotionsSection } from './components/PromotionsSection'
 import { SettingsSection } from './components/SettingsSection'
+import { LogisticsSection } from './components/LogisticsSection'
 import { useInventoryStore } from './lib/store'
 import { useSalesStore } from './lib/salesStore'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -14,7 +15,7 @@ import { ChangePassword } from './pages/ChangePassword'
 import { useSettingsStore } from './lib/settingsStore'
 import { useEffect } from 'react'
 
-type View = 'DASHBOARD' | 'INVENTORY' | 'SALES' | 'PROMOTIONS' | 'SETTINGS';
+type View = 'DASHBOARD' | 'INVENTORY' | 'SALES' | 'PROMOTIONS' | 'LOGISTICS' | 'SETTINGS';
 
 function AppContent() {
   const { user, userData, logout } = useAuth();
@@ -28,6 +29,15 @@ function AppContent() {
 
   // Initialize Data Subscriptions
   useEffect(() => {
+    // Only subscribe if authenticated
+    if (!user) {
+      // If not authenticated, ensure stores are clean so next login is fresh
+      useInventoryStore.getState().cleanup();
+      useSalesStore.getState().cleanup();
+      useSettingsStore.getState().cleanup();
+      return;
+    }
+
     let unsubInventory = () => { };
     let unsubSales = () => { };
     let unsubSettings = () => { };
@@ -49,7 +59,7 @@ function AppContent() {
         console.error("Error cleaning up subscriptions:", error);
       }
     };
-  }, [initInventory, initSales, initSettings]);
+  }, [user, initInventory, initSales, initSettings]);
 
   // Metrics Calculation
   const metrics = useMemo(() => {
@@ -144,6 +154,13 @@ function AppContent() {
               isOpen={isSidebarOpen}
               active={currentView === 'SALES'}
               onClick={() => setCurrentView('SALES')}
+            />
+            <NavItem
+              icon={<Truck size={20} />}
+              label="Logística"
+              isOpen={isSidebarOpen}
+              active={currentView === 'LOGISTICS'}
+              onClick={() => setCurrentView('LOGISTICS')}
             />
             <div className="pt-4 mt-4 border-t border-border">
               <NavItem
@@ -261,6 +278,14 @@ function AppContent() {
 
           {currentView === 'PROMOTIONS' && (
             <PromotionsSection />
+          )}
+
+          {currentView === 'PROMOTIONS' && (
+            <PromotionsSection />
+          )}
+
+          {currentView === 'LOGISTICS' && (
+            <LogisticsSection />
           )}
 
           {currentView === 'SETTINGS' && (
