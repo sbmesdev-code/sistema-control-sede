@@ -26,7 +26,7 @@ const DistrictCard = ({ dist, onUpdate, onToggle }: { dist: any, onUpdate: (name
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.currentTarget.blur();
         }
