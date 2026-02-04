@@ -76,7 +76,7 @@ export function ProductForm({ initialData, onComplete }: ProductFormProps) {
         name: "variants"
     })
 
-    const onSubmit = (data: ProductFormData) => {
+    const onSubmit = async (data: ProductFormData) => {
         if (initialData) {
             // Update existing product
             updateProduct(initialData.id, {
@@ -100,7 +100,7 @@ export function ProductForm({ initialData, onComplete }: ProductFormProps) {
                     images: [] as string[] // Force empty string array for store
                 }))
             });
-            alert("Producto actualizado exitosamente");
+            // alert("Producto actualizado exitosamente"); // Store handles toast
         } else {
             // Create new product
             const newProduct = {
@@ -127,8 +127,14 @@ export function ProductForm({ initialData, onComplete }: ProductFormProps) {
                     images: [] as string[] // Force empty string array for store
                 }))
             };
-            addProduct(newProduct);
-            alert("Producto guardado exitosamente");
+            try {
+                await addProduct(newProduct);
+                // Alert handled by store toast
+            } catch (error) {
+                console.error("Error UI saving product:", error);
+                // Keep form open if error
+                return;
+            }
         }
 
         if (onComplete) {

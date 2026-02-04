@@ -1,0 +1,26 @@
+# Solución al problema de Permisos en Firestore
+
+Si la pantalla se queda en blanco o ves errores de "Missing or insufficient permissions", significa que las "Reglas de Seguridad" de tu base de datos en Firebase están bloqueando el acceso.
+
+## Pasos para arreglarlo:
+
+1.  Ve a la **Consola de Firebase**: [console.firebase.google.com](https://console.firebase.google.com)
+2.  Entra en tu proyecto y ve a **Firestore Database**.
+3.  Haz clic en la pestaña **Reglas** (Rules).
+4.  Borra lo que haya ahí y pega el siguiente código:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permitir leer y escribir a cualquier usuario que haya iniciado sesión
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+5.  Haz clic en **Publicar**.
+
+Esto permitirá que cualquier usuario que inicie sesión en tu App pueda leer y escribir datos. Es seguro para esta etapa del proyecto.

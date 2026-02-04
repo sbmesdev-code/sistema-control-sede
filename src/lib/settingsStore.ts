@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { db } from './firebase';
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 
 export interface DistrictConfig {
     name: string;
@@ -11,14 +13,17 @@ export interface DistrictConfig {
 interface SettingsState {
     globalShippingBase: number; // Fallback or base
     districts: DistrictConfig[];
+    loading: boolean;
+    initialized: boolean;
 
     // Actions
-    updateGlobalShipping: (price: number) => void;
-    updateDistrict: (name: string, config: Partial<DistrictConfig>) => void;
-    toggleDoorDelivery: (name: string) => void;
+    initializeSubscription: () => () => void;
+    updateGlobalShipping: (price: number) => Promise<void>;
+    updateDistrict: (name: string, config: Partial<DistrictConfig>) => Promise<void>;
+    toggleDoorDelivery: (name: string) => Promise<void>;
 }
 
-// Full List Initialization
+// Full List Initialization (Fallback / Seed)
 const INITIAL_DISTRICTS: DistrictConfig[] = [
     // Lima
     { name: 'Lima Cercado', department: 'LIMA', basePrice: 8, allowDoorDelivery: true },
@@ -64,7 +69,6 @@ const INITIAL_DISTRICTS: DistrictConfig[] = [
     { name: 'Surquillo', department: 'LIMA', basePrice: 8, allowDoorDelivery: true },
     { name: 'Villa El Salvador', department: 'LIMA', basePrice: 12, allowDoorDelivery: false },
     { name: 'Villa María del Triunfo', department: 'LIMA', basePrice: 12, allowDoorDelivery: false },
-
     // Callao
     { name: 'Callao', department: 'CALLAO', basePrice: 10, allowDoorDelivery: false },
     { name: 'Bellavista', department: 'CALLAO', basePrice: 9, allowDoorDelivery: true },
@@ -73,26 +77,92 @@ const INITIAL_DISTRICTS: DistrictConfig[] = [
     { name: 'La Punta', department: 'CALLAO', basePrice: 10, allowDoorDelivery: true },
     { name: 'Ventanilla', department: 'CALLAO', basePrice: 12, allowDoorDelivery: false },
     { name: 'Mi Perú', department: 'CALLAO', basePrice: 12, allowDoorDelivery: false },
-];
+] as DistrictConfig[];
 
-export const useSettingsStore = create<SettingsState>()(
-    persist(
-        (set) => ({
-            globalShippingBase: 5,
-            districts: INITIAL_DISTRICTS.sort((a, b) => a.name.localeCompare(b.name)),
+// Sort them
+INITIAL_DISTRICTS.sort((a, b) => a.name.localeCompare(b.name));
 
-            updateGlobalShipping: (price) => set({ globalShippingBase: price }),
+export const useSettingsStore = create<SettingsState>((set, get) => ({
+    globalShippingBase: 5,
+    districts: INITIAL_DISTRICTS,
+    loading: true,
+    initialized: false,
 
-            updateDistrict: (name, config) => set((state) => ({
-                districts: state.districts.map(d => d.name === name ? { ...d, ...config } : d)
-            })),
+    initializeSubscription: () => {
+        if (get().initialized) return () => { };
 
-            toggleDoorDelivery: (name) => set((state) => ({
-                districts: state.districts.map(d => d.name === name ? { ...d, allowDoorDelivery: !d.allowDoorDelivery } : d)
-            }))
-        }),
-        {
-            name: 'scs-settings-storage',
+        const docRef = doc(db, 'settings', 'global');
+        const unsub = onSnapshot(docRef, async (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                set({
+                    globalShippingBase: data.globalShippingBase,
+                    districts: data.districts,
+                    loading: false,
+                    initialized: true
+                });
+            } else {
+                // If doesn't exist, create it with defaults!
+                // This "auto-seeds" the cloud settings.
+                try {
+                    await setDoc(docRef, {
+                        globalShippingBase: 5,
+                        districts: INITIAL_DISTRICTS
+                    });
+                    // Snapshot will trigger again automatically
+                } catch (e) {
+                    console.error("Error creating initial settings:", e);
+                    toast.error("Error inicializando configuración en la nube");
+                }
+            }
+        }, (error) => {
+            console.error(error);
+            toast.error("No se pudo cargar la configuración");
+        });
+
+        set({ initialized: true });
+        return unsub;
+    },
+
+    updateGlobalShipping: async (price) => {
+        try {
+            await updateDoc(doc(db, 'settings', 'global'), {
+                globalShippingBase: price
+            });
+            toast.success('Tarifa base actualizada');
+        } catch (e) {
+            console.error(e);
+            toast.error('Error al guardar');
         }
-    )
-);
+    },
+
+    updateDistrict: async (name, config) => {
+        const currentDistricts = get().districts;
+        const newDistricts = currentDistricts.map(d => d.name === name ? { ...d, ...config } : d);
+
+        try {
+            await updateDoc(doc(db, 'settings', 'global'), {
+                districts: newDistricts
+            });
+            toast.success('Distrito actualizado');
+        } catch (e) {
+            console.error(e);
+            toast.error('Error al actualizar distrito');
+        }
+    },
+
+    toggleDoorDelivery: async (name) => {
+        const currentDistricts = get().districts;
+        const newDistricts = currentDistricts.map(d => d.name === name ? { ...d, allowDoorDelivery: !d.allowDoorDelivery } : d);
+
+        try {
+            await updateDoc(doc(db, 'settings', 'global'), {
+                districts: newDistricts
+            });
+            // toast.success('Preferencia actualizada'); // Maybe too noisy
+        } catch (e) {
+            console.error(e);
+            toast.error('Error al actualizar');
+        }
+    }
+}));

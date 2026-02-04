@@ -133,7 +133,7 @@ export function POS() {
         }));
     }
 
-    const handleCheckout = () => {
+    const handleCheckout = async () => {
         if (cart.length === 0) return;
 
         // Strict Validation 🔒
@@ -163,19 +163,25 @@ export function POS() {
             updatedAt: Date.now()
         };
 
-        store.addSale(newSale);
+        try {
+            await store.addSale(newSale); // Wait for Firestore!
 
-        // Trigger Dialog Flow
-        setLastSale(newSale);
-        setShowReceiptDialog(true);
-        toast.success("¡Venta registrada exitosamente!");
+            // Trigger Dialog Flow
+            setLastSale(newSale);
+            setShowReceiptDialog(true);
+            // toast.success("¡Venta registrada exitosamente!"); // Let store handle success toast? Or keep it here. Store has a toast.
+            // Store has "Venta registrada en la nube". I will comment out this duplicate one to be clean.
 
-        // Reset Form
-        setCart([]);
-        setCustomerName('');
-        setCustomerAddress('');
-        setGlobalDiscountInput('');
-        setDistrict('');
+            // Reset Form
+            setCart([]);
+            setCustomerName('');
+            setCustomerAddress('');
+            setGlobalDiscountInput('');
+            setDistrict('');
+        } catch (error) {
+            console.error(error);
+            // Toast handled in store
+        }
     }
 
     return (

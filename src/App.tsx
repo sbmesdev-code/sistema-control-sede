@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { LayoutDashboard, Package, ShoppingCart, Settings, Menu, Bell, Search, Layers, Tag } from 'lucide-react'
+import { LayoutDashboard, Package, ShoppingCart, Settings, Menu, Bell, Search, Layers, Tag, LogOut } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { cn } from './lib/utils'
 import { InventorySection } from './components/InventorySection'
@@ -8,16 +8,48 @@ import { PromotionsSection } from './components/PromotionsSection'
 import { SettingsSection } from './components/SettingsSection'
 import { useInventoryStore } from './lib/store'
 import { useSalesStore } from './lib/salesStore'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { Login } from './pages/Login'
+import { ChangePassword } from './pages/ChangePassword'
+import { useSettingsStore } from './lib/settingsStore'
+import { useEffect } from 'react'
 
 type View = 'DASHBOARD' | 'INVENTORY' | 'SALES' | 'PROMOTIONS' | 'SETTINGS';
 
-function App() {
+function AppContent() {
+  const { user, userData, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [currentView, setCurrentView] = useState<View>('DASHBOARD')
 
-  // Real Data Hooks
-  const { products } = useInventoryStore()
-  const { sales } = useSalesStore()
+  // Data Hooks
+  const { products, initializeSubscription: initInventory } = useInventoryStore()
+  const { sales, initializeSubscription: initSales } = useSalesStore()
+  const { initializeSubscription: initSettings } = useSettingsStore()
+
+  // Initialize Data Subscriptions
+  useEffect(() => {
+    let unsubInventory = () => { };
+    let unsubSales = () => { };
+    let unsubSettings = () => { };
+
+    try {
+      unsubInventory = initInventory();
+      unsubSales = initSales();
+      unsubSettings = initSettings();
+    } catch (error) {
+      console.error("Failed to initialize subscriptions:", error);
+    }
+
+    return () => {
+      try {
+        unsubInventory();
+        unsubSales();
+        unsubSettings();
+      } catch (error) {
+        console.error("Error cleaning up subscriptions:", error);
+      }
+    };
+  }, [initInventory, initSales, initSettings]);
 
   // Metrics Calculation
   const metrics = useMemo(() => {
@@ -61,9 +93,23 @@ function App() {
     };
   }, [products, sales]);
 
+  // 1. Auth Guard
+  if (!user) {
+    return (
+      <>
+        <Login />
+      </>
+    );
+  }
+
+  // 2. Password Change Guard
+  // We check if userData is loaded and flag is true
+  if (userData?.requiresPasswordChange) {
+    return <ChangePassword />;
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex overflow-hidden">
-      <Toaster richColors position="top-center" />
       {/* Sidebar */}
       <aside className={cn(
         "bg-card border-r border-border transition-all duration-300 ease-in-out z-20",
@@ -76,36 +122,54 @@ function App() {
           </h1>
         </div>
 
-        <nav className="p-4 space-y-2">
-          <NavItem
-            icon={<LayoutDashboard size={20} />}
-            label="Dashboard"
-            isOpen={isSidebarOpen}
-            active={currentView === 'DASHBOARD'}
-            onClick={() => setCurrentView('DASHBOARD')}
-          />
-          <NavItem
-            icon={<Package size={20} />}
-            label="Inventario"
-            isOpen={isSidebarOpen}
-            active={currentView === 'INVENTORY'}
-            onClick={() => setCurrentView('INVENTORY')}
-          />
-          <NavItem
-            icon={<ShoppingCart size={20} />}
-            label="Ventas"
-            isOpen={isSidebarOpen}
-            active={currentView === 'SALES'}
-            onClick={() => setCurrentView('SALES')}
-          />
-          <div className="pt-4 mt-4 border-t border-border">
+        <nav className="p-4 space-y-2 flex flex-col h-[calc(100vh-4rem)]">
+          <div className="flex-1 space-y-2">
             <NavItem
-              icon={<Settings size={20} />}
-              label="Configuración"
+              icon={<LayoutDashboard size={20} />}
+              label="Dashboard"
               isOpen={isSidebarOpen}
-              active={currentView === 'SETTINGS'}
-              onClick={() => setCurrentView('SETTINGS')}
+              active={currentView === 'DASHBOARD'}
+              onClick={() => setCurrentView('DASHBOARD')}
             />
+            <NavItem
+              icon={<Package size={20} />}
+              label="Inventario"
+              isOpen={isSidebarOpen}
+              active={currentView === 'INVENTORY'}
+              onClick={() => setCurrentView('INVENTORY')}
+            />
+            <NavItem
+              icon={<ShoppingCart size={20} />}
+              label="Ventas"
+              isOpen={isSidebarOpen}
+              active={currentView === 'SALES'}
+              onClick={() => setCurrentView('SALES')}
+            />
+            <div className="pt-4 mt-4 border-t border-border">
+              <NavItem
+                icon={<Settings size={20} />}
+                label="Configuración"
+                isOpen={isSidebarOpen}
+                active={currentView === 'SETTINGS'}
+                onClick={() => setCurrentView('SETTINGS')}
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-2">
+            <button
+              onClick={logout}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 group relative hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
+              )}>
+              <span className="group-hover:text-destructive"><LogOut size={20} /></span>
+              <span className={cn(
+                "whitespace-nowrap transition-all duration-300 origin-left font-medium",
+                !isSidebarOpen && "scale-0 w-0 opacity-0 overflow-hidden"
+              )}>
+                Cerrar Sesión
+              </span>
+            </button>
           </div>
         </nav>
       </aside>
@@ -131,8 +195,14 @@ function App() {
               <Bell size={20} />
               <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-destructive rounded-full"></span>
             </button>
-            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium">
-              A
+            <div className="flex items-center gap-2">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-medium leading-none">{userData?.name || user.email}</p>
+                <p className="text-xs text-muted-foreground">Administrador</p>
+              </div>
+              <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium">
+                {userData?.name?.charAt(0) || user.email?.charAt(0).toUpperCase()}
+              </div>
             </div>
           </div>
         </header>
@@ -199,6 +269,15 @@ function App() {
         </main>
       </div>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Toaster richColors position="top-center" />
+      <AppContent />
+    </AuthProvider>
   )
 }
 
