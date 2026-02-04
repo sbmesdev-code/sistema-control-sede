@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Search, Filter, MoreHorizontal, ArrowUpDown } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Search, Filter, MoreHorizontal, ArrowUpDown, Package } from 'lucide-react'
 import { useInventoryStore } from '../../lib/store'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -108,7 +108,7 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
 
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 p-4 bg-muted/30 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground items-center">
-                    <div className="col-span-4">Producto</div>
+                    <div className="col-span-4 pl-2">Producto</div>
                     <div className="col-span-2">SKU Base</div>
                     <div className="col-span-1">Colección</div>
                     <div className="col-span-2 text-center">Rango Precios</div>
@@ -139,9 +139,44 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
                                 <div key={product.id} className="group transition-colors hover:bg-accent/5">
                                     {/* Main Row */}
                                     <div className="grid grid-cols-12 gap-4 p-4 items-center cursor-pointer" onClick={() => toggleRow(product.id)}>
-                                        <div className="col-span-4">
-                                            <div className="font-medium text-foreground">{product.name}</div>
-                                            <div className="text-xs text-muted-foreground">{product.type} • {product.gender}</div>
+                                        <div className="col-span-4 flex items-center gap-4">
+                                            {/* Slideshow Image Preview */}
+                                            <div className="h-16 w-16 rounded-md bg-muted border border-border overflow-hidden flex-shrink-0 relative shadow-sm">
+                                                {(() => {
+                                                    const allImages = product.variants.flatMap(v => v.images || []);
+                                                    if (allImages.length === 0) {
+                                                        return (
+                                                            <div className="h-full w-full flex items-center justify-center text-muted-foreground">
+                                                                <Package className="h-5 w-5 opacity-20" />
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // eslint-disable-next-line react-hooks/rules-of-hooks
+                                                    const [currentIdx, setCurrentIdx] = useState(0);
+
+                                                    // eslint-disable-next-line react-hooks/rules-of-hooks
+                                                    useEffect(() => {
+                                                        if (allImages.length <= 1) return;
+                                                        const interval = setInterval(() => {
+                                                            setCurrentIdx(prev => (prev + 1) % allImages.length);
+                                                        }, 2000);
+                                                        return () => clearInterval(interval);
+                                                    }, [allImages.length]);
+
+                                                    return (
+                                                        <img
+                                                            src={allImages[currentIdx]}
+                                                            alt={product.name}
+                                                            className="h-full w-full object-cover transition-opacity duration-300"
+                                                        />
+                                                    );
+                                                })()}
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-foreground">{product.name}</div>
+                                                <div className="text-xs text-muted-foreground">{product.type} • {product.gender}</div>
+                                            </div>
                                         </div>
 
                                         <div className="col-span-2">
@@ -193,6 +228,7 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
                                                 <table className="w-full text-sm text-left">
                                                     <thead className="bg-muted/50 text-xs text-muted-foreground uppercase">
                                                         <tr>
+                                                            <th className="px-4 py-2 font-medium w-16">Img</th>
                                                             <th className="px-4 py-2 font-medium">SKU Variante</th>
                                                             <th className="px-4 py-2 font-medium">Color / Talla</th>
                                                             <th className="px-4 py-2 font-medium text-right">Costo Prod.</th>
@@ -204,6 +240,15 @@ export function InventoryList({ onAddProduct, onEditProduct }: InventoryListProp
                                                     <tbody className="divide-y divide-border">
                                                         {product.variants.map((variant) => (
                                                             <tr key={variant.id} className="hover:bg-accent/5">
+                                                                <td className="px-4 py-2">
+                                                                    {variant.images && variant.images.length > 0 ? (
+                                                                        <img src={variant.images[0]} alt="" className="w-8 h-8 rounded object-cover border border-border" />
+                                                                    ) : (
+                                                                        <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                                                                            -
+                                                                        </div>
+                                                                    )}
+                                                                </td>
                                                                 <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{variant.sku}</td>
                                                                 <td className="px-4 py-2">
                                                                     <div className="flex items-center gap-2">

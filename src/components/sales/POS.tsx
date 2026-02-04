@@ -1,14 +1,143 @@
-import { useState, useEffect } from 'react'
-import { Search, ShoppingBag, Tag, Trash2, Plus, Minus, User, Truck, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Search, ShoppingBag, Tag, Trash2, Plus, Minus, User, Truck, AlertTriangle, Package, Check } from 'lucide-react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { useInventoryStore } from '../../lib/store'
 import { useSalesStore } from '../../lib/salesStore'
 import { useSettingsStore } from '../../lib/settingsStore'
 import type { SaleItem, Sale, Customer } from '../../types/sales'
+import type { Product, ProductVariant } from '../../types/inventory'
 import { generateReceipt } from '../../lib/receiptGenerator'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { cn } from '../../lib/utils'
+
+// Separate component for performance and cleaner logic
+function ProductCard({ product, addToCart, cart }: { product: Product, addToCart: (variant: ProductVariant, product: Product) => void, cart: SaleItem[] }) {
+    // Group variants by color
+    const variantsByColor = useMemo(() => {
+        const groups: Record<string, ProductVariant[]> = {};
+        product.variants.forEach(v => {
+            const colorKey = v.colorCode || v.color; // Use code or name as key
+            if (!groups[colorKey]) groups[colorKey] = [];
+            groups[colorKey].push(v);
+        });
+        return groups;
+    }, [product.variants]);
+
+    const colorKeys = Object.keys(variantsByColor);
+    const [selectedColorKey, setSelectedColorKey] = useState(colorKeys[0] || '');
+
+    // Update selected color if product changes or variants change
+    useEffect(() => {
+        if (!colorKeys.includes(selectedColorKey)) {
+            setSelectedColorKey(colorKeys[0] || '');
+        }
+    }, [colorKeys, selectedColorKey]);
+
+    const currentVariants = variantsByColor[selectedColorKey] || [];
+
+    // Find image: Try to find an image in the current color variants, fallback to any product image
+    const displayImage = useMemo(() => {
+        const variantWithImage = currentVariants.find(v => v.images && v.images.length > 0);
+        if (variantWithImage) return variantWithImage.images[0];
+
+        // Fallback to any image
+        const anyVariant = product.variants.find(v => v.images && v.images.length > 0);
+        return anyVariant?.images[0];
+    }, [currentVariants, product.variants]);
+
+    return (
+        <div className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full">
+            {/* Image Area */}
+            <div className="aspect-[4/5] w-full bg-muted relative overflow-hidden">
+                {displayImage ? (
+                    <img
+                        src={displayImage}
+                        alt={product.name}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-accent/30">
+                        <Package className="h-12 w-12 opacity-20" />
+                    </div>
+                )}
+
+                {/* Collection Badge */}
+                <div className="absolute top-2 left-2">
+                    <span className="text-[10px] uppercase font-bold px-2 py-1 bg-background/90 backdrop-blur-sm text-foreground rounded-md shadow-sm border border-border/50">
+                        {product.collection}
+                    </span>
+                </div>
+            </div>
+
+            <div className="p-4 flex flex-col flex-1 gap-3">
+                <div>
+                    <h4 className="font-bold text-base leading-tight line-clamp-2">{product.name}</h4>
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">{product.baseCode}</p>
+                </div>
+
+                {/* Color Selector */}
+                {colorKeys.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                        {colorKeys.map(key => {
+                            const variant = variantsByColor[key][0];
+                            const isSelected = key === selectedColorKey;
+                            return (
+                                <button
+                                    key={key}
+                                    onClick={() => setSelectedColorKey(key)}
+                                    className={cn(
+                                        "w-6 h-6 rounded-full border border-border transition-all relative",
+                                        isSelected ? "ring-2 ring-primary ring-offset-2 scale-110" : "hover:scale-110"
+                                    )}
+                                    title={variant.color}
+                                    style={{ backgroundColor: variant.colorCode || '#000000' }} // Fallback if no code
+                                >
+                                    {key === selectedColorKey && (
+                                        <span className="absolute inset-0 flex items-center justify-center">
+                                            {/* Optional checkmark for contrast? Usually ring is enough */}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Size Selector (Actions) */}
+                <div className="grid grid-cols-4 gap-2 mt-auto">
+                    {currentVariants.map(variant => {
+                        const inCart = cart.find(i => i.variantId === variant.id)?.quantity || 0;
+                        const outOfStock = variant.stock === 0;
+
+                        return (
+                            <button
+                                key={variant.id}
+                                disabled={outOfStock}
+                                onClick={() => addToCart(variant, product)}
+                                className={cn(
+                                    "flex flex-col items-center justify-center py-2 rounded-md border text-center transition-all relative overflow-hidden",
+                                    outOfStock
+                                        ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50 border-transparent"
+                                        : "bg-background hover:border-primary hover:text-primary active:bg-primary/5 border-border"
+                                )}
+                            >
+                                <span className="text-xs font-bold">{variant.size}</span>
+                                <span className="text-[10px] text-muted-foreground">S/{variant.priceRetail}</span>
+
+                                {/* In Cart Indicator */}
+                                {inCart > 0 && (
+                                    <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-bl-full shadow-sm" />
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export function POS() {
     const products = useInventoryStore(state => state.products)
@@ -44,16 +173,12 @@ export function POS() {
     // Auto-update shipping cost based on district and method
     useEffect(() => {
         if (deliveryMethod === 'ENCUENTRO') {
-            setShippingCostInput('0'); // Free meetups? or global base? Let's say 0 or base. User asked for logic. Let's make it 0 or low base. 
-            // If user wants default min price logic, it applies mainly to Door logic.
-            // Let's assume Encuentro is user managed or specific cost. defaulting to 0 for now unless user overrides.
+            setShippingCostInput('0');
         } else if (deliveryMethod === 'PUERTA' && district) {
             const dConfig = districts.find(d => d.name === district);
             if (dConfig) {
-                // If checking logic for door delivery safety
                 if (!dConfig.allowDoorDelivery) {
                     setDistrictError(true);
-                    // setShippingCostInput('0'); // Invalid
                 } else {
                     setDistrictError(false);
                     setShippingCostInput(dConfig.basePrice.toString());
@@ -76,7 +201,7 @@ export function POS() {
         p.baseCode.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
-    const addToCart = (variant: any, product: any) => {
+    const addToCart = (variant: ProductVariant, product: Product) => {
         // Stock Validation 🛡️
         const currentInCart = cart.find(i => i.variantId === variant.id)?.quantity || 0;
         if (currentInCart + 1 > variant.stock) {
@@ -104,7 +229,7 @@ export function POS() {
                 subtotal: variant.priceRetail
             }]
         });
-        toast.success("Producto agregado al carrito");
+        toast.success("Agregado al carrito");
     }
 
     const removeFromCart = (variantId: string) => {
@@ -112,7 +237,6 @@ export function POS() {
     }
 
     const updateQuantity = (variantId: string, delta: number) => {
-        // We need to check stock again if increasing
         if (delta > 0) {
             const item = cart.find(i => i.variantId === variantId);
             const product = products.find(p => p.variants.some(v => v.id === variantId));
@@ -136,7 +260,6 @@ export function POS() {
     const handleCheckout = async () => {
         if (cart.length === 0) return;
 
-        // Strict Validation 🔒
         if (!customerName.trim()) { alert("Nombre del Cliente es obligatorio"); return; }
         if (!customerAddress.trim()) { alert("Dirección de Entrega es obligatoria"); return; }
         if (!district) { alert("Debe seleccionar un Distrito"); return; }
@@ -166,13 +289,8 @@ export function POS() {
         try {
             await store.addSale(newSale); // Wait for Firestore!
 
-            // Trigger Dialog Flow
             setLastSale(newSale);
             setShowReceiptDialog(true);
-            // toast.success("¡Venta registrada exitosamente!"); // Let store handle success toast? Or keep it here. Store has a toast.
-            // Store has "Venta registrada en la nube". I will comment out this duplicate one to be clean.
-
-            // Reset Form
             setCart([]);
             setCustomerName('');
             setCustomerAddress('');
@@ -180,7 +298,6 @@ export function POS() {
             setDistrict('');
         } catch (error) {
             console.error(error);
-            // Toast handled in store
         }
     }
 
@@ -191,80 +308,24 @@ export function POS() {
                 <div className="relative">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar producto por nombre o SKU..."
-                        className="pl-10 h-12 text-lg bg-card"
+                        placeholder="Buscar producto por nombre..."
+                        className="pl-10 h-12 text-lg bg-card rounded-xl shadow-sm border-border/50 focus-visible:ring-primary/20"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
 
-                <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-3 gap-4 pb-20">
-                    {filteredProducts.map(product => (
-                        <div key={product.id} className="bg-card border border-border rounded-xl p-5 hover:border-primary/50 transition-all cursor-pointer group shadow-sm hover:shadow-md">
-                            {/* Header: Collection and SKU */}
-                            <div className="flex justify-between items-center mb-3">
-                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-md tracking-wide">
-                                    {product.collection}
-                                </span>
-                                <span className="text-[10px] font-mono text-muted-foreground tracking-tight">
-                                    {product.baseCode}
-                                </span>
-                            </div>
-
-                            {/* Title */}
-                            <h4 className="font-bold text-lg leading-tight line-clamp-2 mb-4 group-hover:text-primary transition-colors">
-                                {product.name}
-                            </h4>
-
-                            {/* Variants List - Compact Grid */}
-                            <div className="grid grid-cols-2 gap-2">
-                                {product.variants.map(variant => {
-                                    const inCart = cart.find(i => i.variantId === variant.id)?.quantity || 0;
-                                    const outOfStock = variant.stock === 0;
-                                    const remaining = variant.stock - inCart;
-
-                                    return (
-                                        <button
-                                            key={variant.id}
-                                            disabled={outOfStock}
-                                            className={`
-                                                relative flex flex-col justify-center items-center p-2 rounded-lg border transition-all text-center h-16
-                                                ${outOfStock
-                                                    ? 'bg-muted/50 border-muted text-muted-foreground cursor-not-allowed opacity-60'
-                                                    : 'bg-background hover:bg-primary hover:text-primary-foreground border-border hover:border-primary'}
-                                            `}
-                                            onClick={() => addToCart(variant, product)}
-                                        >
-
-                                            {/* Size & Color */}
-                                            <div className="text-xs font-semibold leading-none mb-1">
-                                                {variant.color} <span className="opacity-70">|</span> {variant.size}
-                                            </div>
-
-                                            {/* Price */}
-                                            <div className="text-sm font-bold font-mono">
-                                                S/ {variant.priceRetail.toFixed(0)}
-                                            </div>
-
-                                            {/* Stock Badge (Absolute) */}
-                                            {!outOfStock && remaining <= 3 && (
-                                                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[8px] font-bold text-white animate-pulse shadow-sm">
-                                                    !
-                                                </span>
-                                            )}
-
-                                            {/* In Cart Badge */}
-                                            {inCart > 0 && (
-                                                <span className="absolute -top-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground shadow-sm">
-                                                    {inCart}
-                                                </span>
-                                            )}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    ))}
+                <div className="flex-1 overflow-y-auto pr-2 pb-20">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {filteredProducts.map(product => (
+                            <ProductCard
+                                key={product.id}
+                                product={product}
+                                addToCart={addToCart}
+                                cart={cart}
+                            />
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -291,7 +352,8 @@ export function POS() {
                                     <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>
                                 </div>
                                 <div className="flex justify-between items-center mt-2">
-                                    <div className="text-xs text-muted-foreground">
+                                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full border border-border" style={{ backgroundColor: filteredProducts.find(p => p.variants.some(v => v.id === item.variantId))?.variants.find(v => v.id === item.variantId)?.colorCode || '#ddd' }}></div>
                                         {item.color} / {item.size}
                                     </div>
                                     <div className="flex items-center gap-3">
@@ -300,7 +362,7 @@ export function POS() {
                                             <span className="text-xs font-mono w-6 text-center">{item.quantity}</span>
                                             <button onClick={() => updateQuantity(item.variantId, 1)} className="p-1 hover:bg-accent"><Plus className="h-3 w-3" /></button>
                                         </div>
-                                        <span className="font-bold text-sm min-w-[3rem] text-right">${(item.unitPrice * item.quantity).toFixed(2)}</span>
+                                        <span className="font-bold text-sm min-w-[3rem] text-right">S/{(item.unitPrice * item.quantity).toFixed(0)}</span>
                                         <button onClick={() => removeFromCart(item.variantId)} className="text-destructive hover:bg-destructive/10 p-1 rounded">
                                             <Trash2 className="h-4 w-4" />
                                         </button>
@@ -313,11 +375,11 @@ export function POS() {
 
                 {/* Customer & Shipping Form */}
                 <div className="p-4 bg-muted/10 border-t border-border space-y-3 text-sm">
+                    {/* ... (Existing Checkout Logic) ... */}
                     <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                         <User className="h-3 w-3" /> Datos de Envío (Obligatorios)
                     </div>
 
-                    {/* Delivery Method Toggle */}
                     <div className="grid grid-cols-2 gap-2 mb-2 p-1 bg-muted rounded-md border border-border">
                         <button
                             className={`text-xs font-medium py-1.5 rounded-sm transition-all ${deliveryMethod === 'PUERTA' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
@@ -359,7 +421,6 @@ export function POS() {
                         </select>
                     </div>
 
-                    {/* Warnings for Door Delivery */}
                     {deliveryMethod === 'PUERTA' && district && (() => {
                         const distConfig = districts.find(d => d.name === district);
                         if (distConfig && !distConfig.allowDoorDelivery) {
@@ -390,7 +451,6 @@ export function POS() {
 
                 {/* Totals & Actions */}
                 <div className="p-6 bg-card border-t-2 border-primary/20 space-y-3 shadow-inner">
-
                     <div className="grid grid-cols-2 gap-4">
                         <div className="relative">
                             <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

@@ -6,6 +6,7 @@ export interface ProductVariant {
     id: string; // UUID
     sku: string; // Generated SKU
     color: string;
+    colorCode?: string; // Hex code for UI
     size: string;
     stock: number;
     priceProduction: number;
@@ -36,10 +37,11 @@ export interface ProductFormData {
     variants: {
         id?: string;
         color: string;
+        colorCode?: string;
         size: string;
         priceProduction: number;
         priceRetail: number;
         stock: number;
-        images: File[];
+        images: (File | string)[];
     }[];
 }
