@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Loader2, Lock, User as UserIcon } from 'lucide-react';
-import { Button } from '../components/ui/button'; // Assuming we have or will treat as raw HTML styled with Tailwind
 
 export function Login() {
     const { login, loading } = useAuth();
