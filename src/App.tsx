@@ -14,6 +14,7 @@ import { Login } from './pages/Login'
 import { ChangePassword } from './pages/ChangePassword'
 import { useSettingsStore } from './lib/settingsStore'
 import { useEffect } from 'react'
+import { InstallPrompt } from './components/InstallPrompt'
 
 type View = 'DASHBOARD' | 'INVENTORY' | 'SALES' | 'PROMOTIONS' | 'LOGISTICS' | 'SETTINGS';
 
@@ -297,10 +298,12 @@ function AppContent() {
   )
 }
 
+
 function App() {
   return (
     <AuthProvider>
       <Toaster richColors position="top-center" />
+      <InstallPrompt />
       <AppContent />
     </AuthProvider>
   )

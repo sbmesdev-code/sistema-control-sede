@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sistema-control-sede/dev-sw.js?dev-sw', { scope: '/sistema-control-sede/', type: 'classic' })
