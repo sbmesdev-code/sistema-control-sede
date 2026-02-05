@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { LayoutDashboard, Package, ShoppingCart, Settings, Menu, Bell, Search, Layers, Tag, LogOut, Truck } from 'lucide-react'
+import { useState } from 'react'
+import { LayoutDashboard, Package, ShoppingCart, Settings, Menu, Bell, Search, Layers, LogOut, Truck } from 'lucide-react'
 import { Toaster } from 'sonner'
 import { cn } from './lib/utils'
 import { InventorySection } from './components/InventorySection'
@@ -7,16 +7,20 @@ import { SalesSection } from './components/SalesSection'
 import { PromotionsSection } from './components/PromotionsSection'
 import { SettingsSection } from './components/SettingsSection'
 import { LogisticsSection } from './components/LogisticsSection'
+import { DashboardSection } from './components/DashboardSection'
 import { useInventoryStore } from './lib/store'
 import { useSalesStore } from './lib/salesStore'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { Login } from './pages/Login'
 import { ChangePassword } from './pages/ChangePassword'
 import { useSettingsStore } from './lib/settingsStore'
+import { AccountingSection } from './components/AccountingSection'
+import { useExpensesStore } from './lib/expensesStore' // Add import
+import { PieChart } from 'lucide-react'
 import { useEffect } from 'react'
 import { InstallPrompt } from './components/InstallPrompt'
 
-type View = 'DASHBOARD' | 'INVENTORY' | 'SALES' | 'PROMOTIONS' | 'LOGISTICS' | 'SETTINGS';
+type View = 'DASHBOARD' | 'INVENTORY' | 'SALES' | 'PROMOTIONS' | 'LOGISTICS' | 'SETTINGS' | 'ACCOUNTING';
 
 function AppContent() {
   const { user, userData, logout } = useAuth();
@@ -24,9 +28,10 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<View>('DASHBOARD')
 
   // Data Hooks
-  const { products, initializeSubscription: initInventory } = useInventoryStore()
-  const { sales, initializeSubscription: initSales } = useSalesStore()
+  const { initializeSubscription: initInventory } = useInventoryStore()
+  const { initializeSubscription: initSales } = useSalesStore()
   const { initializeSubscription: initSettings } = useSettingsStore()
+  const { initializeSubscription: initExpenses } = useExpensesStore()
 
   // Initialize Data Subscriptions
   useEffect(() => {
@@ -42,11 +47,13 @@ function AppContent() {
     let unsubInventory = () => { };
     let unsubSales = () => { };
     let unsubSettings = () => { };
+    let unsubExpenses = () => { };
 
     try {
       unsubInventory = initInventory();
       unsubSales = initSales();
       unsubSettings = initSettings();
+      unsubExpenses = initExpenses();
     } catch (error) {
       console.error("Failed to initialize subscriptions:", error);
     }
@@ -56,53 +63,14 @@ function AppContent() {
         unsubInventory();
         unsubSales();
         unsubSettings();
+        unsubExpenses();
       } catch (error) {
         console.error("Error cleaning up subscriptions:", error);
       }
     };
-  }, [user, initInventory, initSales, initSettings]);
+  }, [user, initInventory, initSales, initSettings, initExpenses]);
 
-  // Metrics Calculation
-  const metrics = useMemo(() => {
-    // 1. Total Inventory Count (Sum of all variant stocks)
-    const inventoryCount = products.reduce((acc, product) => {
-      return acc + product.variants.reduce((vAcc, variant) => vAcc + variant.stock, 0);
-    }, 0);
 
-    // 2. Sales this month
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    const monthlySales = sales.filter(sale => {
-      const d = new Date(sale.createdAt);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear && sale.status !== 'CANCELADO';
-    }).reduce((acc, sale) => acc + sale.total, 0);
-
-    // 3. Pending Orders
-    const pendingOrders = sales.filter(sale => sale.status !== 'ENTREGADO' && sale.status !== 'CANCELADO').length;
-
-    // 4. Estimated Profit (Ganancias)
-    // Profit = (Subtotal - GlobalDiscount) - COGS
-    // We exclude shipping from profit calculation assuming it's a pass-through cost or handled separately.
-    const estimatedProfit = sales.filter(s => s.status !== 'CANCELADO').reduce((acc, sale) => {
-      const income = sale.subtotal - sale.globalDiscount;
-      const cogs = sale.items.reduce((itemAcc, item) => {
-        // Look up cost in current inventory (Note: this uses current cost, not historical cost)
-        const product = products.find(p => p.variants.some(v => v.id === item.variantId));
-        const variant = product?.variants.find(v => v.id === item.variantId);
-        return itemAcc + (item.quantity * (variant?.priceProduction || 0));
-      }, 0);
-      return acc + (income - cogs);
-    }, 0);
-
-    return {
-      inventoryCount,
-      monthlySales,
-      pendingOrders,
-      estimatedProfit
-    };
-  }, [products, sales]);
 
   // 1. Auth Guard
   if (!user) {
@@ -120,7 +88,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex overflow-hidden">
+    <div className="h-screen bg-background text-foreground flex overflow-hidden">
       {/* Sidebar */}
       <aside className={cn(
         "bg-card border-r border-border transition-all duration-300 ease-in-out z-20",
@@ -133,8 +101,8 @@ function AppContent() {
           </h1>
         </div>
 
-        <nav className="p-4 space-y-2 flex flex-col h-[calc(100vh-4rem)]">
-          <div className="flex-1 space-y-2">
+        <nav className="p-4 space-y-2 flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
+          <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent">
             <NavItem
               icon={<LayoutDashboard size={20} />}
               label="Dashboard"
@@ -164,6 +132,13 @@ function AppContent() {
               onClick={() => setCurrentView('LOGISTICS')}
             />
             <div className="pt-4 mt-4 border-t border-border">
+              <NavItem
+                icon={<PieChart size={20} />}
+                label="Contable"
+                isOpen={isSidebarOpen}
+                active={currentView === 'ACCOUNTING'}
+                onClick={() => setCurrentView('ACCOUNTING')}
+              />
               <NavItem
                 icon={<Settings size={20} />}
                 label="Configuración"
@@ -227,49 +202,12 @@ function AppContent() {
 
         <main className="flex-1 p-6 overflow-auto">
           {currentView === 'DASHBOARD' && (
-            <div className="space-y-6">
-              <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">Bienvenido al SCS</h1>
-                <p className="text-muted-foreground">Sistema de Control de Sede - Panel Principal</p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card
-                  title="Inventario Total (Unidades)"
-                  value={metrics.inventoryCount.toString()}
-                  icon={<Package className="text-primary" />}
-                />
-                <Card
-                  title="Ventas del Mes"
-                  value={`S/ ${metrics.monthlySales.toFixed(2)}`}
-                  icon={<ShoppingCart className="text-primary" />}
-                />
-                <Card
-                  title="Ganancia Estimada"
-                  value={`S/ ${metrics.estimatedProfit.toFixed(2)}`}
-                  icon={<Tag className="text-emerald-500" />}
-                />
-                <Card
-                  title="Pedidos Pendientes"
-                  value={metrics.pendingOrders.toString()}
-                  icon={<Bell className="text-destructive" />}
-                />
-              </div>
-
-              <div className="rounded-xl border border-border bg-card text-card-foreground shadow p-6">
-                <h3 className="font-semibold leading-none tracking-tight mb-4">Estado del Sistema</h3>
-                <p className="text-sm text-muted-foreground">
-                  Sistema operativo v1.0. Las métricas se actualizan en tiempo real.
-                </p>
-              </div>
-            </div>
+            <DashboardSection />
           )}
 
 
           {currentView === 'INVENTORY' && (
-            <div className="h-full">
-              <InventorySection />
-            </div>
+            <InventorySection />
           )}
 
 
@@ -287,6 +225,10 @@ function AppContent() {
 
           {currentView === 'LOGISTICS' && (
             <LogisticsSection />
+          )}
+
+          {currentView === 'ACCOUNTING' && (
+            <AccountingSection />
           )}
 
           {currentView === 'SETTINGS' && (
@@ -333,18 +275,5 @@ function NavItem({ icon, label, isOpen, active = false, onClick }: { icon: React
   )
 }
 
-function Card({ title, value, icon }: { title: string, value: string, icon: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-border bg-card text-card-foreground shadow">
-      <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-        <h3 className="tracking-tight text-sm font-medium text-muted-foreground">{title}</h3>
-        {icon}
-      </div>
-      <div className="p-6 pt-0 mt-2">
-        <div className="text-2xl font-bold">{value}</div>
-      </div>
-    </div>
-  )
-}
 
 export default App

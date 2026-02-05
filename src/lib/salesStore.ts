@@ -25,6 +25,7 @@ interface SalesState {
     addPromotion: (rule: PromotionRule) => Promise<void>;
     togglePromotion: (id: string) => Promise<void>;
     removePromotion: (id: string) => Promise<void>;
+    deleteSale: (id: string) => Promise<void>;
 
     // Logic
     calculateCartTotal: (items: SaleItem[], globalDiscount: number, shippingCost?: number) => { subtotal: number, discountTotal: number, shippingCost: number, total: number, appliedPromotions: string[] };
@@ -123,12 +124,6 @@ export const useSalesStore = create<SalesState>((set, get) => ({
     },
 
     removePromotion: async (id) => {
-        // Implement delete logic if needed, but maybe just soft delete/archive?
-        // For now, let's skip actual deletion or add deleteDoc import if strictly required.
-        // User asked for "sync", let's assume valid delete.
-        // Lazy import deleteDoc or just omit for now as it wasn't strictly asked, 
-        // but the interface has `removePromotion`.
-        // I'll add deleteDoc import.
         const { deleteDoc } = await import('firebase/firestore');
         try {
             await deleteDoc(doc(db, 'promotions', id));
@@ -136,6 +131,17 @@ export const useSalesStore = create<SalesState>((set, get) => ({
         } catch (error) {
             console.error(error);
             toast.error('Error al eliminar promoción');
+        }
+    },
+
+    deleteSale: async (id) => {
+        const { deleteDoc } = await import('firebase/firestore');
+        try {
+            await deleteDoc(doc(db, 'sales', id));
+            toast.success('Venta eliminada');
+        } catch (error) {
+            console.error(error);
+            toast.error('Error al eliminar venta');
         }
     },
 

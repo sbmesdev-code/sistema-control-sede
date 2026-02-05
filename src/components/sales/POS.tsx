@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, ShoppingBag, Tag, Trash2, Plus, Minus, User, Truck, AlertTriangle, Package } from 'lucide-react'
+import { Search, ShoppingBag, Plus, Minus, Truck, MapPin, CreditCard, X, PackageOpen, ArrowLeft, ArrowRight } from 'lucide-react'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { useInventoryStore } from '../../lib/store'
@@ -11,6 +11,7 @@ import { generateReceipt } from '../../lib/receiptGenerator'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { cn } from '../../lib/utils'
+import { AnimatePresence, motion } from 'framer-motion'
 
 // Separate component for performance and cleaner logic
 function ProductCard({ product, addToCart, cart }: { product: Product, addToCart: (variant: ProductVariant, product: Product) => void, cart: SaleItem[] }) {
@@ -18,7 +19,7 @@ function ProductCard({ product, addToCart, cart }: { product: Product, addToCart
     const variantsByColor = useMemo(() => {
         const groups: Record<string, ProductVariant[]> = {};
         product.variants.forEach(v => {
-            const colorKey = v.colorCode || v.color; // Use code or name as key
+            const colorKey = v.colorCode || v.color;
             if (!groups[colorKey]) groups[colorKey] = [];
             groups[colorKey].push(v);
         });
@@ -28,7 +29,6 @@ function ProductCard({ product, addToCart, cart }: { product: Product, addToCart
     const colorKeys = Object.keys(variantsByColor);
     const [selectedColorKey, setSelectedColorKey] = useState(colorKeys[0] || '');
 
-    // Update selected color if product changes or variants change
     useEffect(() => {
         if (!colorKeys.includes(selectedColorKey)) {
             setSelectedColorKey(colorKeys[0] || '');
@@ -37,35 +37,44 @@ function ProductCard({ product, addToCart, cart }: { product: Product, addToCart
 
     const currentVariants = variantsByColor[selectedColorKey] || [];
 
-    // Find image: Try to find an image in the current color variants, fallback to any product image
     const displayImage = useMemo(() => {
         const variantWithImage = currentVariants.find(v => v.images && v.images.length > 0);
         if (variantWithImage) return variantWithImage.images[0];
-
-        // Fallback to any image
-        const anyVariant = product.variants.find(v => v.images && v.images.length > 0);
-        return anyVariant?.images[0];
-    }, [currentVariants, product.variants]);
+        return undefined;
+    }, [currentVariants]);
 
     return (
-        <div className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all group flex flex-col h-full">
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="group flex flex-col h-full bg-card rounded-2xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+        >
             {/* Image Area */}
-            <div className="aspect-[4/5] w-full bg-muted relative overflow-hidden">
+            <div
+                className="aspect-[4/5] w-full bg-muted/30 relative overflow-hidden cursor-pointer active:scale-95 transition-transform"
+                onClick={() => {
+                    const availableVariant = currentVariants.find(v => v.stock > 0);
+                    if (availableVariant) {
+                        addToCart(availableVariant, product);
+                    } else {
+                        toast.error("No hay stock disponible en este color");
+                    }
+                }}
+            >
                 {displayImage ? (
                     <img
                         src={displayImage}
                         alt={product.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-accent/30">
-                        <Package className="h-12 w-12 opacity-20" />
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
+                        <PackageOpen className="h-12 w-12" />
                     </div>
                 )}
 
-                {/* Collection Badge */}
-                <div className="absolute top-2 left-2">
-                    <span className="text-[10px] uppercase font-bold px-2 py-1 bg-background/90 backdrop-blur-sm text-foreground rounded-md shadow-sm border border-border/50">
+                <div className="absolute top-3 left-3 flex gap-2 pointer-events-none">
+                    <span className="text-[10px] font-bold px-2.5 py-1 bg-background/80 backdrop-blur-md text-foreground rounded-full shadow-sm border border-white/20">
                         {product.collection}
                     </span>
                 </div>
@@ -73,13 +82,18 @@ function ProductCard({ product, addToCart, cart }: { product: Product, addToCart
 
             <div className="p-4 flex flex-col flex-1 gap-3">
                 <div>
-                    <h4 className="font-bold text-base leading-tight line-clamp-2">{product.name}</h4>
-                    <p className="text-xs text-muted-foreground mt-1 font-mono">{product.baseCode}</p>
+                    <div className="flex justify-between items-start gap-2">
+                        <h4 className="font-bold text-sm leading-snug line-clamp-2 min-h-[2.5rem]">{product.name}</h4>
+                        <span className="font-black text-lg text-primary shrink-0">
+                            S/ {currentVariants[0]?.priceRetail || product.variants[0]?.priceRetail || 0}
+                        </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{product.baseCode}</p>
                 </div>
 
                 {/* Color Selector */}
                 {colorKeys.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                         {colorKeys.map(key => {
                             const variant = variantsByColor[key][0];
                             const isSelected = key === selectedColorKey;
@@ -88,25 +102,19 @@ function ProductCard({ product, addToCart, cart }: { product: Product, addToCart
                                     key={key}
                                     onClick={() => setSelectedColorKey(key)}
                                     className={cn(
-                                        "w-6 h-6 rounded-full border border-border transition-all relative",
-                                        isSelected ? "ring-2 ring-primary ring-offset-2 scale-110" : "hover:scale-110"
+                                        "w-5 h-5 rounded-full shadow-sm border border-border transition-all",
+                                        isSelected ? "ring-2 ring-primary ring-offset-2 scale-110" : "hover:scale-110 opacity-70 hover:opacity-100"
                                     )}
                                     title={variant.color}
-                                    style={{ backgroundColor: variant.colorCode || '#000000' }} // Fallback if no code
-                                >
-                                    {key === selectedColorKey && (
-                                        <span className="absolute inset-0 flex items-center justify-center">
-                                            {/* Optional checkmark for contrast? Usually ring is enough */}
-                                        </span>
-                                    )}
-                                </button>
+                                    style={{ backgroundColor: variant.colorCode || '#000000' }}
+                                />
                             );
                         })}
                     </div>
                 )}
 
-                {/* Size Selector (Actions) */}
-                <div className="grid grid-cols-4 gap-2 mt-auto">
+                {/* Size Selector */}
+                <div className="grid grid-cols-4 gap-1.5 mt-auto">
                     {currentVariants.map(variant => {
                         const inCart = cart.find(i => i.variantId === variant.id)?.quantity || 0;
                         const outOfStock = variant.stock === 0;
@@ -117,25 +125,24 @@ function ProductCard({ product, addToCart, cart }: { product: Product, addToCart
                                 disabled={outOfStock}
                                 onClick={() => addToCart(variant, product)}
                                 className={cn(
-                                    "flex flex-col items-center justify-center py-2 rounded-md border text-center transition-all relative overflow-hidden",
+                                    "relative flex flex-col items-center justify-center py-1.5 rounded-lg border text-center transition-all px-0",
                                     outOfStock
-                                        ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50 border-transparent"
-                                        : "bg-background hover:border-primary hover:text-primary active:bg-primary/5 border-border"
+                                        ? "bg-muted/50 text-muted-foreground/50 cursor-not-allowed border-transparent"
+                                        : "bg-background hover:border-primary hover:bg-primary/5 active:scale-95 border-border"
                                 )}
                             >
                                 <span className="text-xs font-bold">{variant.size}</span>
-                                <span className="text-[10px] text-muted-foreground">S/{variant.priceRetail}</span>
-
-                                {/* In Cart Indicator */}
                                 {inCart > 0 && (
-                                    <div className="absolute top-0 right-0 w-3 h-3 bg-primary rounded-bl-full shadow-sm" />
+                                    <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
+                                        {inCart}
+                                    </span>
                                 )}
                             </button>
                         )
                     })}
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 }
 
@@ -148,6 +155,7 @@ export function POS() {
     const [searchTerm, setSearchTerm] = useState('')
     const [cart, setCart] = useState<SaleItem[]>([])
     const [globalDiscountInput, setGlobalDiscountInput] = useState('')
+    const [checkoutStep, setCheckoutStep] = useState<'CART' | 'DETAILS'>('CART')
 
     // Dialog State
     const [showReceiptDialog, setShowReceiptDialog] = useState(false)
@@ -164,30 +172,32 @@ export function POS() {
     const [district, setDistrict] = useState('')
     const [shippingCostInput, setShippingCostInput] = useState(globalShippingBase.toString())
 
-    // Derived Data
     const availableDistricts = districts.filter(d => d.department === department);
 
-    // Derived Totals
     const [totals, setTotals] = useState({ subtotal: 0, discountTotal: 0, shippingCost: 0, total: 0, appliedPromotions: [] as string[] })
 
-    // Auto-update shipping cost based on district and method
     useEffect(() => {
-        if (deliveryMethod === 'ENCUENTRO') {
-            setShippingCostInput('0');
-        } else if (deliveryMethod === 'PUERTA' && district) {
+        if (district) {
             const dConfig = districts.find(d => d.name === district);
             if (dConfig) {
-                if (!dConfig.allowDoorDelivery) {
+                setShippingCostInput(dConfig.basePrice.toString());
+
+                // Optional: Validate door delivery if needed, but primarily set price
+                if (deliveryMethod === 'PUERTA' && !dConfig.allowDoorDelivery) {
                     setDistrictError(true);
                 } else {
                     setDistrictError(false);
-                    setShippingCostInput(dConfig.basePrice.toString());
                 }
             }
+        } else {
+            // Default or reset if no district selected? 
+            // Maybe keep previous value or set to global base.
+            // For now, let's leave it as is or set to 0 if 'ENCUENTRO' was intended to be cheap but user wants dynamic.
+            // If no district, maybe we shouldn't zero it out immediately to allow manual entry, 
+            // but the prompt implies "automático tras seleccionar".
         }
     }, [district, deliveryMethod, districts]);
 
-    // Recalculate totals
     useEffect(() => {
         const globalDisc = parseFloat(globalDiscountInput) || 0;
         const shipping = parseFloat(shippingCostInput) || 0;
@@ -195,14 +205,12 @@ export function POS() {
         setTotals(calcs);
     }, [cart, globalDiscountInput, shippingCostInput, store]);
 
-    // Filter products
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.baseCode.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
     const addToCart = (variant: ProductVariant, product: Product) => {
-        // Stock Validation 🛡️
         const currentInCart = cart.find(i => i.variantId === variant.id)?.quantity || 0;
         if (currentInCart + 1 > variant.stock) {
             toast.error(`¡Stock insuficiente! Solo quedan ${variant.stock} unidades.`);
@@ -243,7 +251,7 @@ export function POS() {
             const variant = product?.variants.find(v => v.id === variantId);
 
             if (item && variant && item.quantity + delta > variant.stock) {
-                toast.error(`¡Stock insuficiente! Solo quedan ${variant.stock} unidades.`);
+                toast.error(`Stock máximo alcanzado (${variant.stock})`);
                 return;
             }
         }
@@ -259,10 +267,9 @@ export function POS() {
 
     const handleCheckout = async () => {
         if (cart.length === 0) return;
-
-        if (!customerName.trim()) { alert("Nombre del Cliente es obligatorio"); return; }
-        if (!customerAddress.trim()) { alert("Dirección de Entrega es obligatoria"); return; }
-        if (!district) { alert("Debe seleccionar un Distrito"); return; }
+        if (!customerName.trim()) { toast.error("Nombre del Cliente es obligatorio"); return; }
+        if (!customerAddress.trim()) { toast.error("Dirección es obligatoria"); return; }
+        if (!district) { toast.error("Distrito es obligatorio"); return; }
 
         const customer: Customer = {
             name: customerName,
@@ -287,11 +294,11 @@ export function POS() {
         };
 
         try {
-            await store.addSale(newSale); // Wait for Firestore!
-
+            await store.addSale(newSale);
             setLastSale(newSale);
             setShowReceiptDialog(true);
             setCart([]);
+            setCheckoutStep('CART'); // Reset view
             setCustomerName('');
             setCustomerAddress('');
             setGlobalDiscountInput('');
@@ -302,21 +309,25 @@ export function POS() {
     }
 
     return (
-        <div className="h-full grid grid-cols-12 gap-6 p-1">
+        <div className="h-full flex flex-row overflow-hidden bg-background">
             {/* Left: Product Catalog */}
-            <div className="col-span-8 flex flex-col gap-4 h-full">
-                <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar producto por nombre..."
-                        className="pl-10 h-12 text-lg bg-card rounded-xl shadow-sm border-border/50 focus-visible:ring-primary/20"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+            <div className="flex-1 flex flex-col min-w-0 bg-muted/10 h-full overflow-hidden">
+                {/* Search Bar */}
+                <div className="flex-none p-6 pb-2">
+                    <div className="relative max-w-2xl mx-auto w-full">
+                        <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground pointer-events-none" />
+                        <Input
+                            placeholder="Buscar producto por nombre, código..."
+                            className="pl-12 h-12 text-lg rounded-2xl border-border/50 bg-background shadow-sm hover:shadow-md transition-shadow focus-visible:ring-primary/20"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto pr-2 pb-20">
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {/* Grid */}
+                <div className="flex-1 overflow-y-auto p-6 pt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-6 pb-20 max-w-7xl mx-auto">
                         {filteredProducts.map(product => (
                             <ProductCard
                                 key={product.id}
@@ -329,180 +340,272 @@ export function POS() {
                 </div>
             </div>
 
-            {/* Right: Cart & Checkout */}
-            <div className="col-span-4 bg-card border border-border rounded-xl h-full flex flex-col shadow-xl overflow-hidden">
-                <div className="p-4 border-b border-border bg-muted/30">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                        <ShoppingBag className="h-5 w-5" /> Carrito de Venta
-                    </h2>
-                </div>
+            {/* Right: Cart Panel */}
+            <div className="w-[380px] xl:w-[420px] 2xl:w-[450px] flex-none border-l border-border/60 bg-card h-full flex flex-col shadow-2xl z-20 transition-all duration-300">
 
-                {/* Cart Items List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {cart.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
-                            <ShoppingBag className="h-16 w-16 mb-4" />
-                            <p>Carrito vacío</p>
-                        </div>
+                {/* Header */}
+                <div className="p-4 border-b border-border/50 flex items-center justify-between bg-background/50 backdrop-blur-sm shadow-sm z-10 shrink-0 h-[60px]">
+                    {checkoutStep === 'CART' ? (
+                        <>
+                            <h2 className="font-bold flex items-center gap-2 text-base">
+                                <ShoppingBag className="h-4 w-4 text-primary" />
+                                Carrito
+                                <span className="text-[10px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border/50">
+                                    {cart.length} items
+                                </span>
+                            </h2>
+                            {cart.length > 0 && (
+                                <Button variant="ghost" size="sm" onClick={() => setCart([])} className="text-destructive hover:bg-destructive/10 h-7 px-2 text-xs rounded-full">
+                                    Limpiar
+                                </Button>
+                            )}
+                        </>
                     ) : (
-                        cart.map(item => (
-                            <div key={item.variantId} className="flex flex-col p-3 bg-accent/20 rounded-lg border border-border/50">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-medium text-sm line-clamp-1">{item.productName}</span>
-                                    <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>
-                                </div>
-                                <div className="flex justify-between items-center mt-2">
-                                    <div className="text-xs text-muted-foreground flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full border border-border" style={{ backgroundColor: filteredProducts.find(p => p.variants.some(v => v.id === item.variantId))?.variants.find(v => v.id === item.variantId)?.colorCode || '#ddd' }}></div>
-                                        {item.color} / {item.size}
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-1 bg-background rounded border border-border">
-                                            <button onClick={() => updateQuantity(item.variantId, -1)} className="p-1 hover:bg-accent"><Minus className="h-3 w-3" /></button>
-                                            <span className="text-xs font-mono w-6 text-center">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.variantId, 1)} className="p-1 hover:bg-accent"><Plus className="h-3 w-3" /></button>
-                                        </div>
-                                        <span className="font-bold text-sm min-w-[3rem] text-right">S/{(item.unitPrice * item.quantity).toFixed(0)}</span>
-                                        <button onClick={() => removeFromCart(item.variantId)} className="text-destructive hover:bg-destructive/10 p-1 rounded">
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCheckoutStep('CART')}
+                                className="h-8 w-8 p-0 rounded-full hover:bg-muted"
+                            >
+                                <ArrowLeft className="h-4 w-4" />
+                            </Button>
+                            <h2 className="font-bold text-base">Datos de Venta</h2>
+                        </div>
                     )}
                 </div>
 
-                {/* Customer & Shipping Form */}
-                <div className="p-4 bg-muted/10 border-t border-border space-y-3 text-sm">
-                    {/* ... (Existing Checkout Logic) ... */}
-                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                        <User className="h-3 w-3" /> Datos de Envío (Obligatorios)
-                    </div>
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
+                    <AnimatePresence mode="wait">
+                        {checkoutStep === 'CART' ? (
+                            <motion.div
+                                key="cart-list"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.2 }}
+                                className="p-3 space-y-2.5 absolute inset-0 overflow-y-auto"
+                            >
+                                {cart.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground/40 gap-4 min-h-[400px]">
+                                        <div className="p-4 bg-muted/20 rounded-full">
+                                            <ShoppingBag className="h-12 w-12 opacity-20" />
+                                        </div>
+                                        <p className="text-sm font-medium">El carrito está vacío</p>
+                                    </div>
+                                ) : (
+                                    cart.map(item => (
+                                        <div
+                                            key={`${item.variantId}-${item.quantity}`}
+                                            className="flex gap-3 p-2.5 bg-card rounded-xl border border-border/40 hover:border-primary/20 hover:shadow-sm transition-all group"
+                                        >
+                                            {/* Thumbnail */}
+                                            <div className="h-14 w-10 bg-muted/50 rounded-lg overflow-hidden flex-none border border-border/20 shadow-inner relative">
+                                                {(() => {
+                                                    const product = products.find(p => p.variants.some(v => v.id === item.variantId));
+                                                    const variant = product?.variants.find(v => v.id === item.variantId);
+                                                    const image = variant?.images?.[0];
 
-                    <div className="grid grid-cols-2 gap-2 mb-2 p-1 bg-muted rounded-md border border-border">
-                        <button
-                            className={`text-xs font-medium py-1.5 rounded-sm transition-all ${deliveryMethod === 'PUERTA' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                            onClick={() => setDeliveryMethod('PUERTA')}
-                        >
-                            A Puerta 🏠
-                        </button>
-                        <button
-                            className={`text-xs font-medium py-1.5 rounded-sm transition-all ${deliveryMethod === 'ENCUENTRO' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                            onClick={() => setDeliveryMethod('ENCUENTRO')}
-                        >
-                            Punto Encuentro 📍
-                        </button>
-                    </div>
+                                                    if (image) {
+                                                        return (
+                                                            <img
+                                                                src={image}
+                                                                alt={item.productName}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <div
+                                                                className="w-full h-full"
+                                                                style={{ backgroundColor: variant?.colorCode || '#ddd' }}
+                                                            />
+                                                        );
+                                                    }
+                                                })()}
+                                            </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <select
-                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none"
-                            value={department}
-                            onChange={(e) => {
-                                setDepartment(e.target.value as 'LIMA' | 'CALLAO');
-                                setDistrict('');
-                            }}
-                        >
-                            <option value="LIMA">LIMA</option>
-                            <option value="CALLAO">CALLAO</option>
-                        </select>
-                        <select
-                            className={`flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none ${districtError ? 'border-destructive' : ''}`}
-                            value={district}
-                            onChange={(e) => setDistrict(e.target.value)}
-                        >
-                            <option value="">Distrito...</option>
-                            {availableDistricts.map(d => (
-                                <option key={d.name} value={d.name}>
-                                    {d.name} {!d.allowDoorDelivery && deliveryMethod === 'PUERTA' ? '(No Cob.)' : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                                            <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                                                <div>
+                                                    <div className="flex justify-between items-start gap-1">
+                                                        <span className="font-medium text-sm truncate text-foreground/90">{item.productName}</span>
+                                                        <button
+                                                            onClick={() => removeFromCart(item.variantId)}
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-0.5 rounded-md hover:bg-destructive/10"
+                                                        >
+                                                            <X className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                                        <span className="bg-muted/50 px-1.5 py-0.5 rounded text-foreground/70 font-medium">{item.size}</span>
+                                                        <span>{item.color}</span>
+                                                    </div>
+                                                </div>
 
-                    {deliveryMethod === 'PUERTA' && district && (() => {
-                        const distConfig = districts.find(d => d.name === district);
-                        if (distConfig && !distConfig.allowDoorDelivery) {
-                            return (
-                                <div className="text-[10px] text-destructive font-bold bg-destructive/10 p-2 rounded flex items-center gap-2">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    No hay cobertura a puerta en {district}.
+                                                <div className="flex justify-between items-end mt-1.5">
+                                                    <div className="flex items-center gap-1 bg-muted/30 rounded-lg border border-border/30 p-0.5 shadow-sm">
+                                                        <button onClick={() => updateQuantity(item.variantId, -1)} className="p-1 hover:bg-background rounded-md transition-colors"><Minus className="h-2.5 w-2.5" /></button>
+                                                        <span className="text-xs font-mono font-medium w-5 text-center">{item.quantity}</span>
+                                                        <button onClick={() => updateQuantity(item.variantId, 1)} className="p-1 hover:bg-background rounded-md transition-colors"><Plus className="h-2.5 w-2.5" /></button>
+                                                    </div>
+                                                    <span className="font-bold text-sm text-primary">S/ {(item.unitPrice * item.quantity).toFixed(0)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </motion.div>
+                        ) : (
+                            <motion.div
+                                key="checkout-details"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.2 }}
+                                className="p-4 space-y-6 absolute inset-0 overflow-y-auto"
+                            >
+                                {/* Delivery Section */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                                        <Truck className="w-3 h-3" /> Método de Entrega
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => setDeliveryMethod('ENCUENTRO')}
+                                            className={cn("h-20 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2",
+                                                deliveryMethod === 'ENCUENTRO' ? "border-primary bg-primary/5 text-primary" : "border-border bg-card hover:border-primary/50 hover:bg-muted/50"
+                                            )}
+                                        >
+                                            <MapPin className="w-6 h-6 mb-1" />
+                                            <span className="text-xs font-bold">Punto Encuentro</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setDeliveryMethod('PUERTA')}
+                                            className={cn("h-20 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2",
+                                                deliveryMethod === 'PUERTA' ? "border-primary bg-primary/5 text-primary" : "border-border bg-card hover:border-primary/50 hover:bg-muted/50"
+                                            )}
+                                        >
+                                            <Truck className="w-6 h-6 mb-1" />
+                                            <span className="text-xs font-bold">A Puerta</span>
+                                        </button>
+                                    </div>
                                 </div>
-                            )
-                        }
-                        return null;
-                    })()}
 
-                    <Input
-                        placeholder={deliveryMethod === 'PUERTA' ? "Dirección Exacta *" : "Punto de Encuentro (Estación, CC...) *"}
-                        value={customerAddress}
-                        onChange={e => setCustomerAddress(e.target.value)}
-                        className="bg-background h-9"
-                    />
+                                {/* Address Section */}
+                                <div className="space-y-3 bg-muted/10 p-4 rounded-xl border border-border/50">
+                                    <h3 className="text-sm font-semibold">Datos de Cliente</h3>
 
-                    <Input
-                        placeholder="Nombre Completo *"
-                        value={customerName}
-                        onChange={e => setCustomerName(e.target.value)}
-                        className="bg-background h-9"
-                    />
+                                    <div className="space-y-3">
+                                        <div className="grid grid-cols-1 gap-2">
+                                            <label className="text-[10px] font-medium text-muted-foreground uppercase">Nombre Completo</label>
+                                            <Input
+                                                placeholder="Ej. Juan Pérez"
+                                                value={customerName}
+                                                onChange={e => setCustomerName(e.target.value)}
+                                                className="bg-background"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="text-[10px] font-medium text-muted-foreground uppercase">Departamento</label>
+                                                <select
+                                                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                    value={department}
+                                                    onChange={(e) => { setDepartment(e.target.value as any); setDistrict(''); }}
+                                                >
+                                                    <option value="LIMA">Lima</option>
+                                                    <option value="CALLAO">Callao</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-medium text-muted-foreground uppercase">Distrito</label>
+                                                <select
+                                                    className={cn("w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                                        districtError && "border-destructive text-destructive")}
+                                                    value={district}
+                                                    onChange={(e) => setDistrict(e.target.value)}
+                                                >
+                                                    <option value="">Seleccionar...</option>
+                                                    {availableDistricts.map(d => (
+                                                        <option key={d.name} value={d.name}>{d.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-2">
+                                            <label className="text-[10px] font-medium text-muted-foreground uppercase">
+                                                {deliveryMethod === 'PUERTA' ? "Dirección de Entrega" : "Punto de Encuentro"}
+                                            </label>
+                                            <Input
+                                                placeholder={deliveryMethod === 'PUERTA' ? "Av. Principal 123..." : "Ej. Estación Central..."}
+                                                value={customerAddress}
+                                                onChange={e => setCustomerAddress(e.target.value)}
+                                                className="bg-background"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Financials Section */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-medium text-muted-foreground">Costo de Envío (S/)</label>
+                                        <input
+                                            className="w-20 text-right bg-muted/30 border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:border-primary"
+                                            value={shippingCostInput}
+                                            onChange={e => setShippingCostInput(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-medium text-muted-foreground">Descuento Global (S/)</label>
+                                        <input
+                                            className="w-20 text-right bg-muted/30 border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:border-primary"
+                                            value={globalDiscountInput}
+                                            onChange={e => setGlobalDiscountInput(e.target.value)}
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
-                {/* Totals & Actions */}
-                <div className="p-6 bg-card border-t-2 border-primary/20 space-y-3 shadow-inner">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="relative">
-                            <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Desc. Global"
-                                className="bg-background pl-9 h-9"
-                                type="number"
-                                value={globalDiscountInput}
-                                onChange={(e) => setGlobalDiscountInput(e.target.value)}
-                            />
+                {/* Footer Actions */}
+                <div className="flex-none p-4 bg-card border-t border-border shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.05)] z-30 shrink-0">
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-baseline">
+                            <span className="text-sm font-medium text-muted-foreground">Total a Pagar</span>
+                            <span className="font-black text-2xl text-primary">S/ {totals.total.toFixed(2)}</span>
                         </div>
-                        <div className="relative">
-                            <Truck className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Envío"
-                                className="bg-background pl-9 h-9"
-                                type="number"
-                                value={shippingCostInput}
-                                onChange={(e) => setShippingCostInput(e.target.value)}
-                            />
-                        </div>
-                    </div>
 
-                    <div className="space-y-1 text-sm pt-2">
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Subtotal</span>
-                            <span>S/ {totals.subtotal.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-muted-foreground">
-                            <span>Envío</span>
-                            <span>+S/ {totals.shippingCost.toFixed(2)}</span>
-                        </div>
-                        {totals.discountTotal > 0 && (
-                            <div className="flex justify-between text-emerald-600 font-medium">
-                                <span>Descuentos {totals.appliedPromotions.length > 0 && `(${totals.appliedPromotions.length} reglas)`}</span>
-                                <span>-S/ {totals.discountTotal.toFixed(2)}</span>
-                            </div>
+                        {checkoutStep === 'CART' ? (
+                            <Button
+                                size="lg"
+                                className="w-full font-bold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all"
+                                onClick={() => {
+                                    if (cart.length > 0) setCheckoutStep('DETAILS');
+                                    else toast.error("El carrito está vacío");
+                                }}
+                                disabled={cart.length === 0}
+                            >
+                                Continuar Compra
+                                <ArrowRight className="w-4 h-4 ml-2" />
+                            </Button>
+                        ) : (
+                            <Button
+                                size="lg"
+                                className="w-full font-bold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={handleCheckout}
+                            >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Confirmar Venta
+                            </Button>
                         )}
-                        <div className="flex justify-between text-xl font-black pt-2 border-t border-border mt-2">
-                            <span>Total</span>
-                            <span>S/ {totals.total.toFixed(2)}</span>
-                        </div>
                     </div>
-
-                    <Button
-                        size="lg"
-                        className="w-full shadow-lg shadow-primary/20 text-lg h-12"
-                        onClick={handleCheckout}
-                        disabled={cart.length === 0}
-                    >
-                        Cobrar S/ {totals.total.toFixed(2)}
-                    </Button>
                 </div>
             </div>
 
@@ -513,17 +616,17 @@ export function POS() {
                     if (lastSale) {
                         try {
                             generateReceipt(lastSale);
-                            toast.success("Boleta generada correctamente");
+                            toast.success("Boleta generada");
                         } catch (error) {
                             console.error(error);
-                            toast.error("Error al generar la boleta");
+                            toast.error("Error al generar PDF");
                         }
                     }
                 }}
-                title="Venta Registrada Exitosamente"
-                message="¿Desea generar y descargar la boleta de venta ahora?"
-                confirmText="Sí, Generar Boleta"
-                cancelText="No por ahora"
+                title="¡Venta Exitosa!"
+                message={`Se registró la venta por S/ ${lastSale?.total.toFixed(2)}. ¿Deseas imprimir el comprobante?`}
+                confirmText="Sí, Imprimir"
+                cancelText="Cerrar"
                 variant="success"
             />
         </div>

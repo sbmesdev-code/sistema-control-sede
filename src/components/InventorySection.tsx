@@ -20,7 +20,7 @@ export function InventorySection() {
     }
 
     return (
-        <div className="h-full flex flex-col">
+        <div className="flex flex-col relative">
             {(mode === 'CREATE' || mode === 'EDIT') && (
                 <div className="mb-4">
                     <Button variant="ghost" onClick={handleCancel} className="gap-2">

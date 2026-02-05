@@ -1,220 +1,250 @@
 import { useState, useMemo } from 'react'
-import { FileText, Search, Filter, AlertTriangle, Clock, CheckCircle } from 'lucide-react'
+import { FileText, Search, Filter, Clock, CheckCircle, Trash2, XCircle } from 'lucide-react'
 import { useSalesStore } from '../../lib/salesStore'
 import { Input } from '../ui/input'
 import { generateReceipt } from '../../lib/receiptGenerator'
 import type { SaleStatus } from '../../types/sales'
+import { cn } from '../../lib/utils'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export function SalesList() {
-    const { sales, updateSaleStatus } = useSalesStore()
+    const { sales, updateSaleStatus, deleteSale } = useSalesStore()
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState<SaleStatus | 'ALL'>('ALL')
 
+    // Deletion State
+    const [saleToDelete, setSaleToDelete] = useState<string | null>(null)
+
     const filteredSales = useMemo(() => {
         return sales.filter(sale => {
-            const matchesSearch = sale.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = sale.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                sale.id.toLowerCase().includes(searchTerm.toLowerCase());
             const matchesStatus = statusFilter === 'ALL' || sale.status === statusFilter;
             return matchesSearch && matchesStatus;
         }).sort((a, b) => b.createdAt - a.createdAt);
     }, [sales, searchTerm, statusFilter]);
 
+    const getStatusColor = (status: SaleStatus) => {
+        switch (status) {
+            case 'ADELANTADO': return "bg-amber-100 text-amber-700 border-amber-200";
+            case 'COMPLETO': return "bg-blue-100 text-blue-700 border-blue-200";
+            case 'ENTREGADO': return "bg-emerald-100 text-emerald-700 border-emerald-200";
+            case 'CANCELADO': return "bg-red-100 text-red-700 border-red-200";
+            default: return "bg-gray-100 text-gray-700";
+        }
+    }
+
+    const getStatusIcon = (status: SaleStatus) => {
+        switch (status) {
+            case 'ADELANTADO': return <Clock className="w-3.5 h-3.5" />;
+            case 'COMPLETO': return <CheckCircle className="w-3.5 h-3.5" />; // Or specific icon
+            case 'ENTREGADO': return <CheckCircle className="w-3.5 h-3.5" />;
+            case 'CANCELADO': return <XCircle className="w-3.5 h-3.5" />;
+            default: return null;
+        }
+    }
+
     return (
         <div className="space-y-6 h-full flex flex-col">
             {/* Filters Header */}
-            <div className="flex gap-4 items-center bg-card p-4 rounded-xl border border-border">
+            <div className="flex bg-card p-1 rounded-xl border border-border/50 shadow-sm gap-2">
                 <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Buscar por cliente..."
-                        className="pl-9 bg-background"
+                        placeholder="Buscar por cliente o ID..."
+                        className="pl-10 border-transparent bg-transparent h-10 focus-visible:ring-0"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="w-px bg-border my-2" />
+                <div className="flex items-center gap-2 px-3">
                     <Filter className="h-4 w-4 text-muted-foreground" />
                     <select
-                        className="h-10 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none"
+                        className="h-10 bg-transparent text-sm font-medium focus:outline-none text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as SaleStatus | 'ALL')}
                     >
                         <option value="ALL">Todos los estados</option>
                         <option value="ADELANTADO">Adelantado</option>
-                        <option value="COMPLETO">Pagado / Completo</option>
+                        <option value="COMPLETO">Completo</option>
                         <option value="ENTREGADO">Entregado</option>
                         <option value="CANCELADO">Cancelado</option>
                     </select>
                 </div>
             </div>
 
-            {/* Sales Table */}
-            <div className="flex-1 overflow-auto border border-border rounded-xl bg-card shadow-sm">
-                <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-muted-foreground uppercase bg-muted/50 sticky top-0 z-10">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                ID / Fecha
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                Cliente
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                Detalles
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                Estado
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                Tiempo Restante (SLA)
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                Total
-                            </th>
-                            <th className="px-6 py-3 text-right text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                                Acciones
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border bg-card">
-                        {filteredSales.length === 0 ? (
+            {/* Sales Table Wrapper */}
+            <div className="bg-card rounded-xl border border-border/50 shadow-sm flex-1 overflow-hidden flex flex-col">
+                <div className="overflow-auto flex-1">
+                    <table className="w-full text-sm text-left">
+                        <thead className="text-xs text-muted-foreground uppercase bg-muted/30 sticky top-0 z-10 backdrop-blur-sm">
                             <tr>
-                                <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
-                                    No se encontraron ventas
-                                </td>
+                                <th className="px-6 py-4 font-semibold">ID / Fecha</th>
+                                <th className="px-6 py-4 font-semibold">Cliente</th>
+                                <th className="px-6 py-4 font-semibold">Detalles</th>
+                                <th className="px-6 py-4 font-semibold">Estado</th>
+                                <th className="px-6 py-4 font-semibold">SLA</th>
+                                <th className="px-6 py-4 font-semibold text-right">Total</th>
+                                <th className="px-6 py-4 font-semibold text-right">Acciones</th>
                             </tr>
-                        ) : (
-                            filteredSales.map((sale) => {
-                                // SLA Logic ⏳
-                                const slaTarget = sale.createdAt + (24 * 60 * 60 * 1000);
-                                const now = Date.now();
-                                const isDelivered = sale.status === 'ENTREGADO';
-                                const timeLeftMs = slaTarget - now;
-                                const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60));
-                                const minutesLeft = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
-
-                                let slaColor = "text-emerald-600";
-                                let slaText = `${hoursLeft}h ${minutesLeft}m`;
-
-                                if (!isDelivered) {
-                                    if (timeLeftMs < 0) {
-                                        slaColor = "text-red-600 font-bold animate-pulse";
-                                        slaText = `VENCIDO (${Math.abs(hoursLeft)}h)`;
-                                    } else if (hoursLeft < 4) {
-                                        slaColor = "text-orange-500 font-semibold";
-                                    }
-                                } else {
-                                    slaColor = "text-muted-foreground";
-                                    slaText = "Completado";
-                                }
-
-                                return (
-                                    <tr key={sale.id} className="hover:bg-muted/50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex flex-col">
-                                                <span className="font-mono text-xs font-bold">{sale.id.slice(0, 8)}</span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {new Date(sale.createdAt).toLocaleDateString()}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </span>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                            <AnimatePresence>
+                                {filteredSales.length === 0 ? (
+                                    <motion.tr
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                    >
+                                        <td colSpan={7} className="px-6 py-20 text-center text-muted-foreground">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Search className="h-8 w-8 opacity-20" />
+                                                <p>No se encontraron ventas</p>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-sm">{sale.customer.name}</span>
-                                                <span className="text-xs text-muted-foreground truncate max-w-[150px]" title={sale.customer.address}>
-                                                    {sale.customer.address}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-1 max-w-[200px]">
-                                                {sale.items.map(item => (
-                                                    <span key={item.variantId} className="text-xs">
-                                                        <b>{item.quantity}x</b> {item.productName} <span className="text-muted-foreground">({item.color}/{item.size})</span>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="relative group w-fit cursor-pointer">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-full min-w-[100px] justify-center transition-all group-hover:opacity-80
-                                                    ${sale.status === 'ADELANTADO' ? 'bg-yellow-100 text-yellow-800' : ''}
-                                                    ${sale.status === 'COMPLETO' ? 'bg-blue-100 text-blue-800' : ''}
-                                                    ${sale.status === 'ENTREGADO' ? 'bg-green-100 text-green-800' : ''}
-                                                    ${sale.status === 'CANCELADO' ? 'bg-red-100 text-red-800' : ''}
-                                                `}>
-                                                    {sale.status === 'ADELANTADO' && <Clock className="w-3 h-3 mr-1" />}
-                                                    {sale.status === 'ENTREGADO' && <CheckCircle className="w-3 h-3 mr-1" />}
-                                                    {sale.status}
-                                                </span>
+                                    </motion.tr>
+                                ) : (
+                                    filteredSales.map((sale) => {
+                                        // SLA Logic
+                                        const slaTarget = sale.createdAt + (24 * 60 * 60 * 1000);
+                                        const now = Date.now();
+                                        const isDelivered = sale.status === 'ENTREGADO' || sale.status === 'CANCELADO';
+                                        const timeLeftMs = slaTarget - now;
+                                        const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60));
 
-                                                <select
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                    value={sale.status}
-                                                    onChange={(e) => {
-                                                        if (confirm(`¿Cambiar estado a ${e.target.value}?`)) {
-                                                            updateSaleStatus(sale.id, e.target.value as SaleStatus);
-                                                        }
-                                                    }}
-                                                >
-                                                    <option value="ADELANTADO">ADELANTADO</option>
-                                                    <option value="COMPLETO">COMPLETO</option>
-                                                    <option value="ENTREGADO">ENTREGADO</option>
-                                                    <option value="CANCELADO">CANCELADO</option>
-                                                </select>
+                                        let slaColor = "text-emerald-600 bg-emerald-50 border-emerald-100";
+                                        let slaText = `${Math.max(0, hoursLeft)}h restantes`;
 
-                                                {/* Edit Hint (Hover) */}
-                                                <div className="absolute -right-2 -top-1">
-                                                    <span className="flex h-2 w-2 rounded-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="bg-muted/40 p-2 rounded-lg border border-border/50">
-                                                <div className={`flex items-center gap-2 text-sm ${slaColor}`}>
-                                                    {!isDelivered && timeLeftMs < 0 && <AlertTriangle className="h-4 w-4" />}
-                                                    {isDelivered && <CheckCircle className="h-4 w-4" />}
-                                                    <span className="font-mono font-medium">{slaText}</span>
-                                                </div>
-                                                {/* Progress Bar Visual */}
-                                                {!isDelivered && timeLeftMs > 0 && (
-                                                    <div className="w-24 h-1.5 bg-muted rounded-full mt-1 overflow-hidden">
-                                                        <div
-                                                            className={`h-full rounded-full ${hoursLeft < 4 ? 'bg-orange-500' : 'bg-emerald-500'}`}
-                                                            style={{ width: `${Math.max(0, Math.min(100, (1 - (timeLeftMs / (24 * 60 * 60 * 1000))) * 100))}%` }}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-foreground">
-                                            S/ {sale.total.toFixed(2)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button
-                                                onClick={() => {
-                                                    try {
-                                                        generateReceipt(sale);
-                                                    } catch (error) {
-                                                        console.error("Error generating receipt:", error);
-                                                        alert("Error al generar la boleta. Verifica la consola.");
-                                                    }
-                                                }}
-                                                className="text-muted-foreground hover:text-primary transition-colors p-2 hover:bg-accent rounded-full"
-                                                title="Imprimir Boleta"
+                                        if (!isDelivered) {
+                                            if (timeLeftMs < 0) {
+                                                slaColor = "text-red-700 bg-red-50 border-red-100 animate-pulse";
+                                                slaText = `VENCIDO (${Math.abs(hoursLeft)}h)`;
+                                            } else if (hoursLeft < 4) {
+                                                slaColor = "text-amber-700 bg-amber-50 border-amber-100";
+                                                slaText = `${hoursLeft}h (Atención)`;
+                                            }
+                                        } else {
+                                            slaColor = "text-muted-foreground bg-muted/50 border-transparent";
+                                            slaText = "-";
+                                        }
+
+                                        return (
+                                            <motion.tr
+                                                key={sale.id}
+                                                layoutId={sale.id}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="hover:bg-muted/30 transition-colors group"
                                             >
-                                                <FileText className="h-4 w-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                )
-                            })
-                        )}
-                    </tbody>
-                </table>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono text-xs font-bold text-foreground/80">#{sale.id.slice(0, 8)}</span>
+                                                        <span className="text-[10px] text-muted-foreground mt-0.5">
+                                                            {new Date(sale.createdAt).toLocaleDateString()} {new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-sm">{sale.customer.name}</span>
+                                                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5" title={sale.customer.address}>
+                                                            <span className="truncate max-w-[120px]">{sale.customer.address}</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        {sale.items.slice(0, 2).map((item, idx) => (
+                                                            <div key={`${item.variantId}-${idx}`} className="text-xs flex items-center gap-1">
+                                                                <span className="px-1 py-0.5 bg-muted rounded text-[10px] font-mono">{item.quantity}x</span>
+                                                                <span className="truncate max-w-[150px]">{item.productName}</span>
+                                                            </div>
+                                                        ))}
+                                                        {sale.items.length > 2 && (
+                                                            <span className="text-[10px] text-muted-foreground italic">+ {sale.items.length - 2} más...</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="relative group/status w-fit">
+                                                        <span className={cn(
+                                                            "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border transition-all gap-1.5 cursor-pointer hover:shadow-sm",
+                                                            getStatusColor(sale.status)
+                                                        )}>
+                                                            {getStatusIcon(sale.status)}
+                                                            {sale.status}
+                                                        </span>
+
+                                                        <select
+                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                            value={sale.status}
+                                                            onChange={(e) => {
+                                                                if (confirm(`¿Cambiar estado a ${e.target.value}?`)) {
+                                                                    updateSaleStatus(sale.id, e.target.value as SaleStatus);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <option value="ADELANTADO">ADELANTADO</option>
+                                                            <option value="COMPLETO">COMPLETO</option>
+                                                            <option value="ENTREGADO">ENTREGADO</option>
+                                                            <option value="CANCELADO">CANCELADO</option>
+                                                        </select>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className={cn("px-2.5 py-1 rounded-lg text-xs font-medium border w-fit whitespace-nowrap", slaColor)}>
+                                                        {slaText}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold">
+                                                    S/ {sale.total.toFixed(2)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => generateReceipt(sale)}
+                                                            className="p-2 hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
+                                                            title="Imprimir Boleta"
+                                                        >
+                                                            <FileText className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSaleToDelete(sale.id)}
+                                                            className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                                                            title="Eliminar Venta"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </motion.tr>
+                                        )
+                                    })
+                                )}
+                            </AnimatePresence>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+
+            <ConfirmDialog
+                isOpen={!!saleToDelete}
+                onClose={() => setSaleToDelete(null)}
+                onConfirm={() => {
+                    if (saleToDelete) {
+                        deleteSale(saleToDelete);
+                        setSaleToDelete(null);
+                    }
+                }}
+                title="Eliminar Venta"
+                message="¿Estás seguro que deseas eliminar esta venta permanentemente? Esta acción no se puede deshacer."
+                confirmText="Sí, Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+            />
         </div>
     )
 }
