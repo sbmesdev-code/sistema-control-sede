@@ -4,18 +4,15 @@ import { useInventoryStore } from '../lib/store';
 import { useExpensesStore } from '../lib/expensesStore';
 import {
     PieChart, Pie, Cell, ResponsiveContainer,
-    BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
+    XAxis, YAxis, Tooltip, Legend, CartesianGrid,
     AreaChart, Area
 } from 'recharts';
 import {
     Download,
     Plus,
     Trash2,
-    Calendar,
     DollarSign,
     TrendingDown,
-    TrendingUp,
-    Filter,
     FileText
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -73,18 +70,63 @@ export function AccountingSection() {
         });
 
         // 3. Operating Expenses
-        const operatingExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
+        // 3. Generate Inventory Expenses from Products (based on creation date)
+        const inventoryExpenses: any[] = [];
+        products.forEach(p => {
+            const d = new Date(p.createdAt);
+            // Check if product creation falls within selected period
+            let inPeriod = false;
+            if (d.getFullYear() === selectedYear) {
+                if (viewMode === 'ANNUAL') inPeriod = true;
+                else if (d.getMonth() === selectedMonth) inPeriod = true;
+            }
 
-        // 4. Net Profit
-        const totalOutflows = cogs + operatingExpenses;
+            if (inPeriod) {
+                let stockCost = 0;
+                p.variants.forEach(v => {
+                    stockCost += v.stock * (v.priceProduction || 0);
+                });
+
+                if (stockCost > 0) {
+                    inventoryExpenses.push({
+                        id: `inv-${p.id}`,
+                        description: `Inventario Inicial: ${p.name}`,
+                        amount: stockCost,
+                        category: 'COSTO_PRODUCCION',
+                        date: p.createdAt,
+                        createdAt: p.createdAt,
+                        updatedAt: p.createdAt,
+                        isFixed: false
+                    });
+                }
+            }
+        });
+
+        // Combine Real Expenses + Inventory Expenses for calculations
+        const combinedExpenses = [...filteredExpenses, ...inventoryExpenses];
+
+        // 4. Totals (Operating Expenses includes Inventory Cost now as per user request)
+        const totalExpenses = combinedExpenses.reduce((acc, e) => acc + e.amount, 0);
+        const totalOutflows = cogs + totalExpenses;
         const netProfit = income - totalOutflows;
 
         // 5. Data for Charts
         // Category Distribution
         const expenseByCategory: Record<string, number> = {};
-        filteredExpenses.forEach(e => {
-            expenseByCategory[e.category] = (expenseByCategory[e.category] || 0) + e.amount;
+        combinedExpenses.forEach(e => {
+            let cat = e.category;
+            // Distinguish Inventory Cost in Pie Chart
+            if (e.id.startsWith('inv-')) {
+                cat = 'COSTO_ALMACEN (No Vendido)';
+            }
+            expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
         });
+
+        // Add COGS to Pie Chart Data
+        if (cogs > 0) {
+            expenseByCategory['COSTO_PRODUCCION (Vendido)'] = cogs;
+        }
+
         const pieData = Object.entries(expenseByCategory).map(([name, value]) => ({ name, value }));
 
         // Daily/Monthly Trend
@@ -104,7 +146,8 @@ export function AccountingSection() {
                     trendData[day - 1].cogs += item.quantity * (variant?.priceProduction || 0);
                 });
             });
-            filteredExpenses.forEach(e => {
+            // Use combinedExpenses to populate chart
+            combinedExpenses.forEach(e => {
                 const day = new Date(e.date).getDate();
                 trendData[day - 1].expenses += e.amount;
             });
@@ -123,7 +166,8 @@ export function AccountingSection() {
                     trendData[m].cogs += item.quantity * (variant?.priceProduction || 0);
                 });
             });
-            filteredExpenses.forEach(e => {
+            // Use combinedExpenses
+            combinedExpenses.forEach(e => {
                 const m = new Date(e.date).getMonth();
                 trendData[m].expenses += e.amount;
             });
@@ -131,13 +175,33 @@ export function AccountingSection() {
             trendData.forEach(d => d.expenses += d.cogs);
         }
 
+        // 6. Display Expenses (Include COGS as a virtual expense)
+        // 6. Display Expenses (Include COGS as a virtual expense)
+        const allExpenses: any[] = [...combinedExpenses];
+        if (cogs > 0) {
+            allExpenses.push({
+                id: 'cogs-summary',
+                description: 'Costo de Producción de Inventario (Vendido)',
+                amount: cogs,
+                category: 'COSTO_PRODUCCION',
+                date: new Date(selectedYear, viewMode === 'MONTHLY' ? selectedMonth + 1 : 12, 0).getTime(), // End of period (or distributed? User probably ok with summary line for COGS)
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                isFixed: false
+            });
+        }
+
+        // Sort by date desc
+        allExpenses.sort((a, b) => b.date - a.date);
+
         return {
             income,
             cogs,
-            operatingExpenses,
+            operatingExpenses: totalExpenses,
             totalOutflows,
             netProfit,
             filteredExpenses,
+            allExpenses,
             pieData,
             trendData
         };
@@ -188,12 +252,12 @@ export function AccountingSection() {
         });
 
         // Expenses Detail
-        doc.text("Detalle de Gastos Operativos", 14, (doc as any).lastAutoTable.finalY + 10);
+        doc.text("Detalle de Gastos (Operativos + Producción)", 14, (doc as any).lastAutoTable.finalY + 10);
 
         autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 15,
             head: [['Fecha', 'Descripción', 'Categoría', 'Monto']],
-            body: metrics.filteredExpenses.map(e => [
+            body: metrics.allExpenses.map(e => [
                 new Date(e.date).toLocaleDateString(),
                 e.description,
                 e.category,
@@ -207,7 +271,7 @@ export function AccountingSection() {
     };
 
     // Constants
-    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ef4444', '#3b82f6'];
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -278,7 +342,9 @@ export function AccountingSection() {
                         <div className="text-sm text-muted-foreground flex items-center gap-2">
                             <span title="Costo de Mercadería">COGS: {metrics.cogs.toFixed(0)}</span>
                             <span>+</span>
-                            <span title="Gastos Operativos">Gastos: {metrics.operatingExpenses.toFixed(0)}</span>
+                            <span title="Costo de Mercadería">COGS: {metrics.cogs.toFixed(0)}</span>
+                            <span>+</span>
+                            <span title="Gastos Operativos + Inventario">Gastos: {metrics.operatingExpenses.toFixed(0)}</span>
                         </div>
                     </div>
                 </div>
@@ -314,7 +380,7 @@ export function AccountingSection() {
                                 <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `S/${value}`} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                    formatter={(value: number) => [`S/ ${value.toFixed(2)}`, '']}
+                                    formatter={(value: any) => [`S/ ${Number(value).toFixed(2)}`, '']}
                                 />
                                 <Legend />
                                 <Area type="monotone" dataKey="income" name="Ingresos" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={2} />
@@ -339,11 +405,11 @@ export function AccountingSection() {
                                         paddingAngle={5}
                                         dataKey="value"
                                     >
-                                        {metrics.pieData.map((entry, index) => (
+                                        {metrics.pieData.map((_, index) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <Tooltip formatter={(value: number) => `S/ ${value.toFixed(2)}`} />
+                                    <Tooltip formatter={(value: any) => `S/ ${Number(value).toFixed(2)}`} />
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -381,21 +447,25 @@ export function AccountingSection() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {metrics.filteredExpenses.length === 0 ? (
+                            {metrics.allExpenses.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                                         No hay gastos registrados en este periodo.
                                     </td>
                                 </tr>
                             ) : (
-                                metrics.filteredExpenses.map((expense) => (
+                                metrics.allExpenses.map((expense) => (
                                     <tr key={expense.id} className="hover:bg-muted/30 transition-colors">
                                         <td className="px-4 py-3 whitespace-nowrap">
                                             {new Date(expense.date).toLocaleDateString()}
                                         </td>
                                         <td className="px-4 py-3 font-medium">{expense.description}</td>
                                         <td className="px-4 py-3">
-                                            {expense.isFixed ? (
+                                            {expense.category === 'COSTO_PRODUCCION' ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200">
+                                                    Variable (Auto)
+                                                </span>
+                                            ) : expense.isFixed ? (
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                                                     Fijo
                                                 </span>
@@ -414,13 +484,15 @@ export function AccountingSection() {
                                             S/ {expense.amount.toFixed(2)}
                                         </td>
                                         <td className="px-4 py-3 text-center">
-                                            <button
-                                                onClick={() => removeExpense(expense.id)}
-                                                className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                                                title="Eliminar"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            {expense.id !== 'cogs-summary' && !expense.id.toString().startsWith('inv-') && (
+                                                <button
+                                                    onClick={() => removeExpense(expense.id)}
+                                                    className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

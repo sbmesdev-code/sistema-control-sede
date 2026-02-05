@@ -180,21 +180,18 @@ export function POS() {
         if (district) {
             const dConfig = districts.find(d => d.name === district);
             if (dConfig) {
-                setShippingCostInput(dConfig.basePrice.toString());
+                // Determine price based on method
+                const price = deliveryMethod === 'PUERTA' ? dConfig.doorPrice : dConfig.meetupPrice;
+                setShippingCostInput(price.toString());
 
-                // Optional: Validate door delivery if needed, but primarily set price
+                // Validation
                 if (deliveryMethod === 'PUERTA' && !dConfig.allowDoorDelivery) {
                     setDistrictError(true);
+                    toast.error(`Envío a puerta no disponible para ${district}`);
                 } else {
                     setDistrictError(false);
                 }
             }
-        } else {
-            // Default or reset if no district selected? 
-            // Maybe keep previous value or set to global base.
-            // For now, let's leave it as is or set to 0 if 'ENCUENTRO' was intended to be cheap but user wants dynamic.
-            // If no district, maybe we shouldn't zero it out immediately to allow manual entry, 
-            // but the prompt implies "automático tras seleccionar".
         }
     }, [district, deliveryMethod, districts]);
 
@@ -270,6 +267,7 @@ export function POS() {
         if (!customerName.trim()) { toast.error("Nombre del Cliente es obligatorio"); return; }
         if (!customerAddress.trim()) { toast.error("Dirección es obligatoria"); return; }
         if (!district) { toast.error("Distrito es obligatorio"); return; }
+        if (districtError) { toast.error("El método de entrega no está disponible para este distrito"); return; }
 
         const customer: Customer = {
             name: customerName,

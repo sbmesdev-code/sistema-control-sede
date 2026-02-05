@@ -1,4 +1,4 @@
-export type ExpenseCategory = 'ALQUILER' | 'SERVICIOS' | 'PERSONAL' | 'MARKETING' | 'IMPUESTOS' | 'MATERIALES' | 'LOGISTICA' | 'OTROS';
+export type ExpenseCategory = 'ALQUILER' | 'SERVICIOS' | 'PERSONAL' | 'MARKETING' | 'IMPUESTOS' | 'MATERIALES' | 'LOGISTICA' | 'COSTO_PRODUCCION' | 'OTROS';
 
 export interface Expense {
     id: string; // UUID or Auto-generated
